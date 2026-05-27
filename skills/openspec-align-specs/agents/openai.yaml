@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Align Specs"
+  short_description: "Generate or align OpenSpec specs from an existing codebase."
+  default_prompt: "Analyze this codebase and generate or align OpenSpec specs using implemented behavior as the source of truth."
