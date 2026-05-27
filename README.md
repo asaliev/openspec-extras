@@ -13,9 +13,9 @@ Use it when you want an agent to:
 - generate first-time baseline specs under `openspec/specs/`
 - align existing specs with implemented behavior
 - create a schema-shaped OpenSpec alignment change
-- write an alignment `drift.md` report when current specs and code disagree
+- report spec/code drift through the active schema's supported artifacts
 
-The skill treats implemented behavior as the source of truth. If no specs exist, it writes baseline capability specs directly. If specs already exist, it creates an alignment change and stores drift evidence in `openspec/changes/<alignment-id>/drift.md`.
+The skill treats implemented behavior as the source of truth. If no specs exist, it writes baseline capability specs directly. If specs already exist, it creates an alignment change using the configured schema and the local OpenSpec-generated workflow guidance, then stores drift evidence only in artifacts that schema supports.
 
 ## Install
 
@@ -68,7 +68,7 @@ Expected behavior:
 
 - If `openspec/specs/` has no capability specs, the agent generates baseline specs directly.
 - If specs already exist and the user requests alignment, the agent creates a new change using the schema configured in `openspec/config.yaml`.
-- The alignment change includes `drift.md` with source-code evidence for the detected spec drift.
+- The alignment change includes source-code evidence for detected drift in schema-supported artifacts.
 - OpenSpec workspace mode is read-only in v1 because upstream workspace support is still under active development.
 
 ## License
