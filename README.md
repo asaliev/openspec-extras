@@ -17,6 +17,20 @@ Use it when you want an agent to:
 
 The skill treats implemented behavior as the source of truth. If no specs exist, it writes baseline capability specs directly. If specs already exist, it creates an alignment change using the configured schema and the local OpenSpec-generated workflow guidance, then stores drift evidence only in artifacts that schema supports.
 
+### `openspec-apply-change-parallel`
+
+Wrap `openspec-apply-change` so independent tasks run concurrently.
+
+Use it when you want an agent to:
+
+- implement a change faster by working several tasks at once
+- keep dependent tasks strictly ordered while parallelizing the rest
+- cap how many subagents the implementation may use
+
+The skill keeps `openspec-apply-change`'s selection, context loading, and reporting, and replaces only the implementation loop. It maps each remaining task to a concrete file set, groups tasks into waves whose file sets are disjoint, and runs each wave — one subagent per task, up to 4 by default. A wave of one task runs inline with no subagent, and a change whose tasks form a single dependency chain runs exactly like the plain skill.
+
+The orchestrator owns `tasks.md`, the diff review, and the build: subagents never tick checkboxes, never touch files outside their assigned set, and never run the test suite while siblings are working in the same tree.
+
 ### `openspec-review-cycle`
 
 Run an automated review-and-fix loop on a single OpenSpec change.
@@ -38,6 +52,7 @@ Project-local install:
 
 ```bash
 npx skills add asaliev/openspec-extras --skill openspec-align-specs
+npx skills add asaliev/openspec-extras --skill openspec-apply-change-parallel
 npx skills add asaliev/openspec-extras --skill openspec-review-cycle
 ```
 
@@ -86,6 +101,29 @@ Expected behavior:
 - If specs already exist and the user requests alignment, the agent creates a new change using the schema configured in `openspec/config.yaml`.
 - The alignment change includes source-code evidence for detected drift in schema-supported artifacts.
 - OpenSpec workspace mode is read-only in v1 because upstream workspace support is still under active development.
+
+### `openspec-apply-change-parallel`
+
+Example prompts:
+
+```text
+Use openspec-apply-change-parallel on assemble-session-evidence.
+```
+
+```text
+Apply add-identomat-session-result-read in parallel, max 3 subagents.
+```
+
+Expected behavior:
+
+- The change name resolves the same way `openspec-apply-change` resolves it; the agent asks rather than guessing.
+- Before implementing anything, the agent prints the wave plan — which tasks run sequentially, which run together, and at what width — then starts.
+- Concurrency defaults to 4 and is capped there unless you ask for more.
+- Tasks whose file set cannot be determined from the artifacts and the code are run sequentially, not guessed at.
+- Shared types, migrations, dependency manifests, wiring and registration tasks, and whole-repo passes always run sequentially.
+- After each wave the agent reads the diff, runs the project's build and tests once, and ticks only the tasks that verified.
+- If nothing can safely run in parallel, it says so and runs the plain sequential flow with no subagents.
+- Pauses happen at wave boundaries; failed tasks are repaired inline rather than re-delegated, and the change is never archived, synced, or committed.
 
 ### `openspec-review-cycle`
 
