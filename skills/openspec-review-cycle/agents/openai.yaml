@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Review Cycle"
+  short_description: "Codex reviews and verifies an OpenSpec change, a subagent applies the findings, repeat."
+  default_prompt: "Run the review-and-fix cycle on an OpenSpec change: Codex reviews the code and verifies it against the change artifacts, then apply the findings, repeating until clean."
