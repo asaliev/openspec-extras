@@ -149,7 +149,7 @@ Re-review the current state of the change:
 - Verify each applied fix is correct and introduced no new problems.
 - For each declined finding, judge whether the stated reason holds. If it does, drop the finding. If it does not, raise it again with a direct rebuttal of the reason.
 - Do not repeat deferred findings that were tracked somewhere.
-- Raise anything new you now see.
+- Raise anything new you now see — across the whole scope, not only near the lines the last pass edited. Verifying the previous fix is one step, not the frame for this review; a finding four lines from the last edit usually means the earlier pass under-read that region, so read each touched file whole before reporting.
 ```
 
 ### Step 2 — Read the verdict
@@ -198,6 +198,7 @@ Stop after the apply pass when any of these holds:
 - `n == max cycles`.
 - The apply pass applied **nothing** — everything was declined or deferred. Another review pass would surface the same list; report the standoff instead of burning a cycle.
 - This cycle's findings are substantially the same as the previous cycle's and the fixes did not move them. The loop is stuck; stop and say so.
+- **No finding this cycle touched executable code or a spec requirement.** When a whole cycle produced only comment wording and identifier renames, the loop has stopped finding defects and started polishing prose — a search with no natural end. Stop and report the cosmetic findings as a list the user can take or leave, rather than spending another review pass and another full build to chase them.
 - The build or tests broke and the subagent could not fix it. Stop with the working tree as-is and report — do not stack another round of edits on a broken tree.
 
 Otherwise increment `n` and go back to Step 1.
