@@ -40,9 +40,13 @@ Each cycle is two agents with separate jobs:
 - **Codex** runs a code review and `openspec-verify-change` in one read-only pass
 - a **subagent** applies the findings with the `apply-code-review` skill
 
-The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. Spec verification outranks code review whenever the two disagree.
+The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Whenever the last apply pass changed the tree, one closing review always follows it — read-only, with no fixes after it — so the final report says whether the fixes actually landed instead of only that they were attempted. Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. Spec verification outranks code review whenever the two disagree.
 
 Requires the Codex CLI, plus a code-review skill and `openspec-verify-change` on the Codex side.
+
+This skill sets `disable-model-invocation: true`: a loop of Codex reviews and subagent fix passes is too
+expensive to start on its own guess of your intent, so it runs only when you invoke it explicitly. Remove
+that line from the frontmatter if you want the model to reach for it autonomously.
 
 ## Install
 
@@ -127,18 +131,18 @@ Expected behavior:
 
 ### `openspec-review-cycle`
 
-Example prompts:
+Invoke it explicitly — the model will not start this one for you:
 
 ```text
-Use openspec-review-cycle on trace-context-over-rabbit.
+/openspec-review-cycle trace-context-over-rabbit
 ```
 
 ```text
-Run the review cycle on trace-context-over-rabbit, unstaged changes only, max 2 cycles.
+/openspec-review-cycle trace-context-over-rabbit, unstaged changes only, max 2 cycles
 ```
 
 ```text
-Review-cycle add-identomat-session-result-read with gpt-5.6-sol at high effort.
+/openspec-review-cycle add-identomat-session-result-read with gpt-5.6-sol at high effort
 ```
 
 Expected behavior:
@@ -151,6 +155,8 @@ Expected behavior:
 - Findings go to a subagent running `apply-code-review`, which reports Applied / Declined / Deferred.
 - Later cycles carry the previous decisions into the review prompt, so Codex re-judges declines instead of repeating them.
 - The loop stops early when the review is clean, nothing was applied, findings stop moving, or the build breaks.
+- An apply pass is never the last step: budget-exhausted, stuck, and cosmetic-only exits are followed by a mandatory closing review, which reports what the fixes left unresolved and what they broke. Nothing is applied after it.
+- The report ends with a single `CYCLE_RESULT: CLEAN | OPEN_FINDINGS | HALTED` line so an orchestrating agent doesn't have to parse the prose.
 - Prompts, reviews, and decision ledgers are written to a run directory outside the repo, and the change is never archived, synced, or committed.
 
 ## License

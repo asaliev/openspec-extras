@@ -1,6 +1,7 @@
 ---
 name: openspec-review-cycle
-description: Run an automated review-and-fix loop on an OpenSpec change — Codex reviews the code and verifies the implementation against the change artifacts, then a subagent applies the findings — repeating until the review comes back clean or the cycle budget is spent. Use when asked to review, verify, and fix an OpenSpec change end to end, run a Codex review loop, or hand a code review to Codex and the fixes to Claude.
+description: Run an automated review-and-fix loop on an OpenSpec change — Codex reviews the code and verifies the implementation against the change artifacts, then a subagent applies the findings — repeating until the review comes back clean or the cycle budget is spent, then always closing with one more review pass so the last round of fixes is verified rather than assumed. Use when asked to review, verify, and fix an OpenSpec change end to end, run a Codex review loop, or hand a code review to Codex and the fixes to Claude.
+disable-model-invocation: true
 ---
 
 # OpenSpec Review Cycle
@@ -10,6 +11,9 @@ Two-agent loop over one OpenSpec change:
 1. **Codex reviews** (read-only) — code review plus spec verification in a single pass.
 2. **A subagent applies** the findings with the `apply-code-review` skill.
 3. Repeat until the review is clean, the loop stops converging, or the cycle budget runs out.
+4. **Closing review** (read-only, no fixes) whenever the last apply pass changed the tree.
+
+The invariant behind step 4: **an apply pass is never the last thing the loop does.** A cycle that ends in edits ends with an unverified claim — "fixes were applied" is not "the fixes worked". The closing review turns that claim into a verdict the user or an orchestrating agent can act on.
 
 Codex never writes. The applying subagent never reviews. Keeping those roles separate is the point of the skill — do not collapse them.
 
@@ -30,13 +34,13 @@ Parse these from the user's request. Ask only about the change name, and only wh
 | Input | Default | Notes |
 | --- | --- | --- |
 | Change name | none — must resolve | Run `openspec list --json`; if the request names one change unambiguously use it, otherwise use **AskUserQuestion** to let the user pick. Never guess. |
-| Max cycles | `3` | One cycle = one review pass plus one apply pass. `1` still applies findings; use review-only mode to skip applying. |
+| Max cycles | `3` | One cycle = one review pass plus one apply pass. A closing review follows the last apply pass that changed the tree, so `N` cycles means up to `N + 1` review passes. `1` = one review, one apply, one closing review. Use review-only mode to skip applying entirely. |
 | Codex model | unset | Omit `-m` so Codex uses the user's `~/.codex/config.toml` default. Pass whatever model string the user names through verbatim. |
 | Reasoning effort | unset | When the user asks for more or less thinking, add `-c model_reasoning_effort=<none\|minimal\|low\|medium\|high\|xhigh>`. |
 | Review scope | this branch's work vs its base | If the user states a scope in any form, use it. Only when they say nothing about scope, fall back to the base-branch default. See [Resolving the review scope](#resolving-the-review-scope). |
-| Review-only | off | "just review", "no fixes", "dry run" → run cycle 1's review, report, stop before applying. |
+| Review-only | off | "just review", "no fixes", "dry run" → run cycle 1's review, report, stop before applying. No apply pass runs, so that review is already terminal — do not follow it with a redundant closing review. |
 
-Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · max 3 cycles · model: config default · scope: git diff <resolved range>`.
+Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · max 3 cycles + closing review · model: config default · scope: git diff <resolved range>`.
 
 ### Resolving the review scope
 
@@ -93,9 +97,11 @@ RUN_DIR="${TMPDIR:-/tmp}/openspec-review-cycle/<change>-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN_DIR"
 ```
 
-If the harness provides a session scratchpad directory, use that instead. Every artifact of the loop — prompts, reviews, decision ledgers — goes there, named `cycle-<n>-prompt.md`, `cycle-<n>-review.md`, `cycle-<n>-decisions.md`. Report the path at the end.
+If the harness provides a session scratchpad directory, use that instead. Every artifact of the loop — prompts, reviews, decision ledgers — goes there, named `cycle-<n>-prompt.md`, `cycle-<n>-review.md`, `cycle-<n>-decisions.md`, plus `closing-prompt.md` and `closing-review.md` for the closing pass. Report the path at the end.
 
 Record the starting point once: `git rev-parse HEAD` and `git status --porcelain`. The final report compares against it.
+
+Record the same two values again immediately **before each apply pass** — that is the pre-apply snapshot. Whether the closing review runs is decided by comparing the tree against that snapshot, not by trusting the ledger's Applied count: an apply pass can edit files while mis-reporting what it did.
 
 ## The cycle
 
@@ -164,7 +170,7 @@ Before applying, resolve conflicts between the two halves of the review using th
 
 ### Step 3 — Apply pass (subagent)
 
-Spawn one subagent per cycle. Give it the review file path, not the review text pasted inline:
+Take the pre-apply snapshot (see [Setup](#setup)), then spawn one subagent per cycle. Give it the review file path, not the review text pasted inline:
 
 ```
 Use the apply-code-review skill.
@@ -192,16 +198,69 @@ If the subagent does not write the ledger file, write it yourself from its respo
 
 ### Step 4 — Decide whether to loop
 
-Stop after the apply pass when any of these holds:
+Each stop condition routes to one of two places: straight to the final report, or through the closing review in Step 5.
 
-- The review came back clean.
-- `n == max cycles`.
-- The apply pass applied **nothing** — everything was declined or deferred. Another review pass would surface the same list; report the standoff instead of burning a cycle.
-- This cycle's findings are substantially the same as the previous cycle's and the fixes did not move them. The loop is stuck; stop and say so.
-- **No finding this cycle touched executable code or a spec requirement.** When a whole cycle produced only comment wording and identifier renames, the loop has stopped finding defects and started polishing prose — a search with no natural end. Stop and report the cosmetic findings as a list the user can take or leave, rather than spending another review pass and another full build to chase them.
-- The build or tests broke and the subagent could not fix it. Stop with the working tree as-is and report — do not stack another round of edits on a broken tree.
+| Stop condition | Next |
+| --- | --- |
+| The review came back clean. | Final report — that review already describes the current tree. |
+| `n == max cycles`. | **Step 5 — closing review.** |
+| The apply pass applied **nothing** — everything was declined or deferred. Another review pass would surface the same list; report the standoff instead of burning a cycle. | Final report — the tree is unchanged, so there is nothing new to verify. |
+| This cycle's findings are substantially the same as the previous cycle's and the fixes did not move them. The loop is stuck. | **Step 5 — closing review.** |
+| **No finding this cycle touched executable code or a spec requirement.** When a whole cycle produced only comment wording and identifier renames, the loop has stopped finding defects and started polishing prose — a search with no natural end. Report the cosmetic findings as a list the user can take or leave. | **Step 5 — closing review.** |
+| The build or tests broke and the subagent could not fix it. Stop with the working tree as-is — do not stack another round of edits on a broken tree. | Final report — halted. The build failure is the finding; re-reviewing a broken tree buys nothing. |
+
+The rule in one sentence: **every exit other than clean, standoff, and broken-build halt goes through the closing review** — and if the tree is byte-identical to the pre-apply snapshot, skip the closing review regardless of which exit fired, because nothing changed for it to look at.
 
 Otherwise increment `n` and go back to Step 1.
+
+### Step 5 — Closing review (no apply pass)
+
+Write the prompt below to `$RUN_DIR/closing-prompt.md`, then run the same invocation as Step 1 against its own artifacts:
+
+```bash
+codex exec \
+  --sandbox read-only \
+  --cd "$REPO_ROOT" \
+  -o "$RUN_DIR/closing-review.md" \
+  - < "$RUN_DIR/closing-prompt.md"
+```
+
+Same `-m` / `-c model_reasoning_effort` handling, same background execution, and the same failure handling: if Codex exits non-zero or the output is empty, report the exit code and the tail of stdout, do not retry blindly, and **do not report the change as verified** — an unrun closing review is `HALTED`, not `CLEAN`.
+
+Prompt:
+
+```
+$code-review $openspec-verify-change <change-name>
+
+This is the closing review for this change. The fix budget is spent — no fixes will be applied
+after this review. Its purpose is to state whether the change is actually in good shape now.
+
+The previous review's findings were actioned as follows:
+
+<contents of cycle-<n>-decisions.md>
+
+Re-review the current state over the full scope: <scope command>, plus these untracked files:
+<list, or "none">.
+
+Report under exactly these two headings:
+
+## Unresolved
+Findings from the previous review that the applied fixes did not actually resolve, that were
+resolved incorrectly, or that the fixes broke in a new way. Say what remains for each.
+
+## New
+Anything else you now see in scope, including problems this last apply pass introduced.
+
+Code review should not contradict spec verification. Specs have higher priority.
+
+You are read-only. Do not edit files, do not tick tasks, do not archive the change.
+
+Finish your final message with exactly one of these lines, alone on the last line:
+REVIEW_STATUS: CLEAN
+REVIEW_STATUS: FINDINGS
+```
+
+**The closing review is terminal.** It never triggers an apply pass and never starts another cycle, however severe its findings. A must-fix here goes into the final report for the user or the orchestrating agent to act on — do not quietly fix it, and do not extend the cycle budget on your own.
 
 ## When the two reviews disagree
 
@@ -216,12 +275,22 @@ Spec verification outranks code review. Concretely:
 
 State, in this order:
 
-1. Outcome — clean, budget exhausted, stuck, or halted — and after how many cycles.
+1. Outcome — clean, budget exhausted, stuck, or halted — after how many cycles, and the closing review's verdict: "budget exhausted after 3 cycles; closing review CLEAN" or "budget exhausted after 3 cycles; closing review found 2 must-fix". When no closing review ran, say which exception applied (clean exit, nothing applied, broken-build halt, or tree unchanged).
 2. Per cycle: findings count by severity, then applied / declined / deferred counts.
-3. Every finding still outstanding, with its reason. This is the part the user acts on.
+3. Every finding still outstanding, with its reason — including the closing review's, kept under its `Unresolved` and `New` split so it is obvious which fixes failed to land and which problems the last apply pass introduced. This is the part the user acts on.
 4. Any spec-level questions raised under the conflict rules above.
 5. Build and test status from the last apply pass.
 6. `git status --porcelain` and the diff stat versus the recorded starting point, plus the `$RUN_DIR` path.
+
+Finish with exactly one machine-readable line, alone on the last line, so an orchestrating agent does not have to parse the prose:
+
+```
+CYCLE_RESULT: CLEAN
+CYCLE_RESULT: OPEN_FINDINGS
+CYCLE_RESULT: HALTED
+```
+
+`CLEAN` only when the terminal review — the last cycle review or the closing review, whichever ran last — came back clean. `OPEN_FINDINGS` when anything is outstanding, including declined and deferred findings. `HALTED` for a broken build or a Codex run that failed to produce a review.
 
 Never run `openspec archive` or `openspec sync`, and never commit. The change stays open for the user to verify.
 
@@ -229,6 +298,8 @@ Never run `openspec archive` or `openspec sync`, and never commit. The change st
 
 - **Codex edits files anyway.** It cannot under `--sandbox read-only`. If the tree changed during a review pass, something else is running — stop and tell the user.
 - **Findings ping-pong** — cycle 2 reverses cycle 1. Usually the two reviewers disagree on the same code. Stop the loop and put both positions in the report rather than letting the tree oscillate.
+- **The closing review raises a new must-fix.** Expected, not a bug — it means the change is not done. Report it under `CYCLE_RESULT: OPEN_FINDINGS`; do not spawn cycle `n+1`.
+- **The closing review contradicts the last apply pass's own ledger** — the ledger says Applied, the review says unresolved. Trust the review: the ledger is self-reported. Put both positions in the report.
 - **Review names a change that does not exist.** Codex picked a different change than intended. Re-resolve the name with `openspec list --json` and restart cycle 1.
 - **Findings land on files this change never touched.** The base branch was resolved wrong and the diff swallowed the base's commits. Stop before applying anything, re-resolve the base, and restart cycle 1 — do not let the apply pass edit another branch's work.
 - **Empty review output with a zero exit code.** Usually a model or auth problem on the Codex side. Report the tail of stdout; do not silently treat it as clean.
