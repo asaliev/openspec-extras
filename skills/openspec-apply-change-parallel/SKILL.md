@@ -35,6 +35,8 @@ Follow `openspec-apply-change` verbatim: select the change and announce it, run 
 
 Do not skip the context read. The wave plan is only as good as your knowledge of the design artifact — that is where task-to-file mapping actually lives.
 
+Read the repo's own agent instruction files in the same pass — AGENTS.md, CLAUDE.md, or whatever equivalent it uses, plus the guideline files they point to for the languages this change touches. You edit code yourself in waves of one and in every inline repair, so the same rules bind you as bind the subagents.
+
 ## Step 6 — Build the wave plan
 
 Work from the remaining (unchecked) tasks only.
@@ -122,6 +124,10 @@ Rules:
   archive or sync the change.
 - Do NOT run the full build, test suite, or formatter — other agents are working in this same
   tree and a whole-repo pass will collide with them. Narrow checks on your own files only.
+- Before editing, read whichever agent instruction files this repo has at its root — AGENTS.md,
+  CLAUDE.md, or whatever equivalent it uses — plus every guideline file they point to for the
+  languages you are touching. This is a source-editing task, so any "only when the task requires
+  editing code" gate is satisfied. Name the files you read in your report, or say there were none.
 - Match the conventions of the surrounding code. Keep the change minimal and scoped to this task.
 
 Report back:

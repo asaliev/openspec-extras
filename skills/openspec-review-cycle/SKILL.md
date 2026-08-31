@@ -132,6 +132,10 @@ $code-review $openspec-verify-change <change-name>
 
 Code review should not contradict spec verification. Specs have higher priority.
 
+Read whichever agent instruction files this repo has at its root — AGENTS.md, CLAUDE.md, or
+whatever equivalent it uses — plus every guideline file they point to for the languages in
+scope, and report violations of them as findings. If the repo has none, say so.
+
 Scope: <the concrete range from "Resolving the review scope", plus any untracked files>.
 
 You are read-only. Do not edit files, do not tick tasks, do not archive the change.
@@ -186,6 +190,12 @@ the code-review finding and say which requirement it conflicts with.
 You may tick completed items in tasks.md. Do not rewrite spec deltas, the proposal, or design
 artifacts, and do not archive the change — if a finding says an artifact itself is wrong,
 decline it and flag it for the user instead.
+
+Before editing: read whichever agent instruction files this repo has at its root — AGENTS.md,
+CLAUDE.md, or whatever equivalent it uses — plus every guideline file they point to for the
+languages in this diff. This is a source-editing task, so any "only when the task requires
+editing code" gate is satisfied. List the files you read in your report, or say the repo has
+none.
 
 Run the project's standard build and test command if AGENTS.md, CLAUDE.md, or the repo's
 tooling defines one, and report the result.
@@ -252,6 +262,10 @@ resolved incorrectly, or that the fixes broke in a new way. Say what remains for
 Anything else you now see in scope, including problems this last apply pass introduced.
 
 Code review should not contradict spec verification. Specs have higher priority.
+
+Read whichever agent instruction files this repo has at its root — AGENTS.md, CLAUDE.md, or
+whatever equivalent it uses — plus every guideline file they point to for the languages in
+scope, and report violations of them as findings. If the repo has none, say so.
 
 You are read-only. Do not edit files, do not tick tasks, do not archive the change.
 
