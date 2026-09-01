@@ -137,6 +137,9 @@ whatever equivalent it uses — plus every guideline file they point to for the 
 scope, and report violations of them as findings. If the repo has none, say so.
 
 Scope: <the concrete range from "Resolving the review scope", plus any untracked files>.
+Do not review code outside that range.
+
+<the "How to write a finding" block below, verbatim>
 
 You are read-only. Do not edit files, do not tick tasks, do not archive the change.
 Report findings only.
@@ -148,7 +151,62 @@ REVIEW_STATUS: FINDINGS
 
 If `$code-review` does not resolve in this environment, replace that token with a brief: review the diff for readability and overengineering — vague naming, speculative abstractions, defensive checks against impossible states, duplicated helpers that already exist, error-handling theatre, single-call wrappers, scope creep — grouped under `## Must fix` / `## Should fix` / `## Consider`, one issue per bullet with `file:line`.
 
-Cycles 2+ append the previous ledger so Codex reviews the *current* state with memory of what was decided:
+#### How to write a finding
+
+Include this block verbatim in every review prompt — cycle 1, cycles 2+, and the closing review.
+
+A review that names a defect without prescribing its repair costs a whole extra cycle, because the applying agent has to guess and the next review disagrees with the guess. A review that fixes one instance of a rule violation and misses its three siblings costs another. Most cycles past the first are spent on those two failures rather than on the code.
+
+```
+## How to write each finding — mandatory format
+
+A separate agent, not you, will apply your findings. It cannot ask you questions, and it
+applies what you write literally. Every finding must therefore be directly actionable.
+
+For each finding give, in this order:
+1. **Anchor** — `file:line` (exact path and line range).
+2. **Problem** — one sentence saying what is wrong and which rule, requirement, or defect it
+   is. Cite the agent-instruction clause or the spec requirement verbatim when the finding
+   comes from one.
+3. **Prescribed fix** — the exact change to make, as a fenced code block or unified diff, not
+   a description of what should change. A rename gives the old and new identifier; a deletion
+   names exactly what to delete.
+4. **Done when** — a one-line check the applying agent can use to confirm the fix landed (a
+   test name, a build outcome, an observable behavior).
+
+**Report the class, not the instance.** Before you write a finding that cites a rule, search
+the whole scope for every other place the same rule is broken and name them all in that one
+finding. A rule finding that lists one of four occurrences guarantees another review cycle for
+the remaining three. If you cannot sweep exhaustively, say so in the finding and give the
+search you would run.
+
+**Prescribe the whole edit.** Your diff must leave the symbol, member group, or test it
+touches in a consistent state. If removing a member would break a caller or a test elsewhere
+in scope, the diff removes or updates that too — do not hand over a fix that only compiles
+after the applier improvises.
+
+**Comment findings are delete-only.** You may say a comment is factually wrong, forbidden by
+a named rule, or duplicates rationale that belongs elsewhere, and prescribe its deletion.
+Never prescribe replacement prose: a paragraph you author this cycle is a paragraph the next
+review argues with. Wording you merely dislike is not a finding.
+
+**Style findings need a named rule.** Cite the clause, name an existing file that shows the
+accepted pattern, and give the literal replacement text. A style observation that no rule in
+this repo's instruction files supports is not a finding. Your own taste is not the standard.
+
+If you cannot state the prescribed fix concretely, the finding is not ready — drop it, or put
+it under `## Consider` and mark it explicitly as a judgement call the applier may decline.
+
+Group findings under `## Must fix`, `## Should fix`, `## Consider`.
+
+**A clean verdict is a valid, expected result.** Do not manufacture a finding to justify the
+pass. If the scope conforms to the repo's rules and the change's requirements, say so and
+report CLEAN.
+```
+
+The last paragraph is load-bearing. Some code-review skills append a footer telling the reviewer that every finding is in scope and that declining needs a stated reason; read alone, that biases the reviewer toward always emitting something. The explicit permission to return CLEAN is what stops a converged loop from grinding on for two more cycles of comment polish.
+
+Cycles 2+ append the previous ledger so Codex reviews the *current* state with memory of what was decided. Keep the same `How to write a finding` block, and add:
 
 ```
 This is review cycle <n> of <max>. The previous review's findings were actioned as follows:
@@ -160,6 +218,18 @@ Re-review the current state of the change:
 - For each declined finding, judge whether the stated reason holds. If it does, drop the finding. If it does not, raise it again with a direct rebuttal of the reason.
 - Do not repeat deferred findings that were tracked somewhere.
 - Raise anything new you now see — across the whole scope, not only near the lines the last pass edited. Verifying the previous fix is one step, not the frame for this review; a finding four lines from the last edit usually means the earlier pass under-read that region, so read each touched file whole before reporting.
+- Text the previous cycle's review told the applier to write is your own output, not the author's work. Do not raise a finding against it unless it is factually wrong about the code — and then prescribe deleting it, never rewriting it.
+- Any code you cite this cycle that was already present at cycle 1 means the earlier passes under-read that file. Read every file the previous fixes touched from top to bottom before reporting, so its siblings surface now rather than next cycle.
+```
+
+From cycle 3 on, add:
+
+```
+Cycles so far have spent findings on comment and documentation wording. Do not continue that.
+Report a comment-level, naming-level, or wording-level finding only when it states something
+factually wrong about the code or breaks a named clause in this repo's instruction files.
+Prioritise defects in executable behaviour and conformance with the change's requirements.
+If the change is now in good shape, report CLEAN — that is a valid result, not a failure.
 ```
 
 ### Step 2 — Read the verdict
@@ -182,6 +252,22 @@ Use the apply-code-review skill.
 The review is at <RUN_DIR>/cycle-<n>-review.md. It contains both code-review findings and
 OpenSpec verification findings for the change "<change-name>". Read it and apply it to the
 working tree.
+
+Each finding carries a prescribed fix and a "Done when" check. Apply the prescribed fix as
+written unless it is factually wrong against the current code; when you deviate, say exactly
+how and why in the ledger.
+
+Sweep for siblings. For every finding that cites a rule — a guideline clause, a convention, a
+requirement — search the whole change for other places that break the same rule and fix those
+too, whether or not the review anchored them. List the extras you fixed in the ledger under
+the finding that prompted the sweep. A rule fixed at one of four call sites costs another
+review cycle for the other three.
+
+Report incomplete prescriptions. If a prescribed diff edits part of a symbol, member group, or
+test and leaves a related part unmentioned — deleting two operators of six, updating one
+overload of three — say so in the ledger rather than silently choosing. State what you did
+with the unmentioned part and why. Do not extend a deletion past what the finding names when
+extending it would break a passing test the review never mentioned; flag it instead.
 
 Priority rule: the change artifacts under openspec/changes/<change-name>/ are authoritative.
 Where a code-review finding contradicts a spec-verification finding, the spec wins — decline
@@ -267,12 +353,16 @@ Read whichever agent instruction files this repo has at its root — AGENTS.md, 
 whatever equivalent it uses — plus every guideline file they point to for the languages in
 scope, and report violations of them as findings. If the repo has none, say so.
 
+<the "How to write a finding" block, verbatim>
+
 You are read-only. Do not edit files, do not tick tasks, do not archive the change.
 
 Finish your final message with exactly one of these lines, alone on the last line:
 REVIEW_STATUS: CLEAN
 REVIEW_STATUS: FINDINGS
 ```
+
+The finding format matters most here. Nothing in this loop will fix what the closing review reports, so each finding has to be repairable by whoever picks it up later, without this run's context.
 
 **The closing review is terminal.** It never triggers an apply pass and never starts another cycle, however severe its findings. A must-fix here goes into the final report for the user or the orchestrating agent to act on — do not quietly fix it, and do not extend the cycle budget on your own.
 
@@ -311,7 +401,9 @@ Never run `openspec archive` or `openspec sync`, and never commit. The change st
 ## Failure modes
 
 - **Codex edits files anyway.** It cannot under `--sandbox read-only`. If the tree changed during a review pass, something else is running — stop and tell the user.
-- **Findings ping-pong** — cycle 2 reverses cycle 1. Usually the two reviewers disagree on the same code. Stop the loop and put both positions in the report rather than letting the tree oscillate.
+- **Findings ping-pong** — cycle 2 reverses cycle 1. Usually the two reviewers disagree on the same code. Stop the loop and put both positions in the report rather than letting the tree oscillate. The exception is a reversal whose fix is a *deletion* of text an earlier cycle prescribed: that settles the disagreement instead of continuing it, so apply it, forbid a third rewrite in the apply prompt, and note both positions in the final report.
+- **Each cycle finds siblings of the last cycle's findings** — the same rule broken in a new file, the same class of defect one symbol over. The reviewer is reporting instances where it should report classes. Tighten the sweep instruction in the next review prompt and tell the apply pass to fix the class; do not just keep spending cycles.
+- **A finding lands on code that was present at cycle 1 and nothing touched since.** The reviewer is sampling different regions each pass rather than covering the scope, so a clean verdict means "nothing found this pass", not "nothing there". Say that plainly in the final report instead of presenting a late clean review as full coverage.
 - **The closing review raises a new must-fix.** Expected, not a bug — it means the change is not done. Report it under `CYCLE_RESULT: OPEN_FINDINGS`; do not spawn cycle `n+1`.
 - **The closing review contradicts the last apply pass's own ledger** — the ledger says Applied, the review says unresolved. Trust the review: the ledger is self-reported. Put both positions in the report.
 - **Review names a change that does not exist.** Codex picked a different change than intended. Re-resolve the name with `openspec list --json` and restart cycle 1.
