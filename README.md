@@ -37,12 +37,14 @@ Run an automated review-and-fix loop on a single OpenSpec change.
 
 Each cycle is two agents with separate jobs:
 
-- **Codex** runs a code review and `openspec-verify-change` in one read-only pass
+- a **reviewer** runs a code review and `openspec-verify-change` in one read-only pass
 - a **subagent** applies the findings with the `apply-code-review` skill
 
-The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Whenever the last apply pass changed the tree, one closing review always follows it — read-only, with no fixes after it — so the final report says whether the fixes actually landed instead of only that they were attempted. Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. Spec verification outranks code review whenever the two disagree.
+The reviewer is Codex by default. Ask for Claude instead and the review passes run as read-only subagents inside the same session, while everything else stays the same. Naming an effort level switches those passes to a `claude -p` subprocess, since a subagent takes a model but not an effort level.
 
-Requires the Codex CLI, plus a code-review skill and `openspec-verify-change` on the Codex side.
+The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Whenever the last apply pass changed the tree, one closing review always follows it — read-only, with no fixes after it — so the final report says whether the fixes actually landed instead of only that they were attempted. Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. A Claude subagent reviewer runs under a read-only agent type; the `claude -p` fallback runs in plan mode with the write tools denied and nobody to approve a prompt, and the loop checks the tree after each of its passes. Spec verification outranks code review whenever the two disagree.
+
+Requires the Codex CLI — or, for a Claude reviewer at a named effort level, the Claude CLI — plus a code-review skill and `openspec-verify-change` on the reviewer's side.
 
 This skill sets `disable-model-invocation: true`: a loop of Codex reviews and subagent fix passes is too
 expensive to start on its own guess of your intent, so it runs only when you invoke it explicitly. Remove
@@ -115,7 +117,7 @@ Use openspec-apply-change-parallel on assemble-session-evidence.
 ```
 
 ```text
-Apply add-identomat-session-result-read in parallel, max 3 subagents.
+Apply add-session-result-read in parallel, max 3 subagents.
 ```
 
 Expected behavior:
@@ -142,7 +144,15 @@ Invoke it explicitly — the model will not start this one for you:
 ```
 
 ```text
-/openspec-review-cycle add-identomat-session-result-read with gpt-5.6-sol at high effort
+/openspec-review-cycle add-session-result-read with gpt-5.6-sol at high effort
+```
+
+```text
+/openspec-review-cycle add-session-result-read, reviewer claude with opus
+```
+
+```text
+/openspec-review-cycle add-session-result-read, reviewer claude with opus at xhigh effort
 ```
 
 Expected behavior:
@@ -151,9 +161,10 @@ Expected behavior:
 - Scope works the way the `code-review` skill's does: say "unstaged changes", "staged", "the last two commits", "vs develop", or a SHA and it uses exactly that.
 - With no scope stated, it defaults to the merge base with the branch's actual base — resolved from the open PR or by asking, never assumed to be `main` — so stacked feature branches don't drag the base branch's commits into the review.
 - Spec verification always covers the whole change regardless of how the code review is scoped; findings from outside the reviewed range are marked as such in the report.
-- Codex reviews under `--sandbox read-only` and ends its report with `REVIEW_STATUS: CLEAN` or `REVIEW_STATUS: FINDINGS`.
+- The reviewer is Codex unless you ask for Claude; either way it runs read-only, takes the model you name, stays the same for every pass of the run, and ends its report with `REVIEW_STATUS: CLEAN` or `REVIEW_STATUS: FINDINGS`.
 - Findings go to a subagent running `apply-code-review`, which reports Applied / Declined / Deferred.
-- Later cycles carry the previous decisions into the review prompt, so Codex re-judges declines instead of repeating them.
+- Findings say what is wrong and how to tell when it is resolved; the applying subagent decides how to fix it.
+- Later cycles carry the previous decisions into the review prompt, so the reviewer re-judges declines instead of repeating them.
 - The loop stops early when the review is clean, nothing was applied, findings stop moving, or the build breaks.
 - An apply pass is never the last step: budget-exhausted, stuck, and cosmetic-only exits are followed by a mandatory closing review, which reports what the fixes left unresolved and what they broke. Nothing is applied after it.
 - The report ends with a single `CYCLE_RESULT: CLEAN | OPEN_FINDINGS | HALTED` line so an orchestrating agent doesn't have to parse the prose.

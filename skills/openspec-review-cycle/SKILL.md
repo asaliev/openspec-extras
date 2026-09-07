@@ -1,6 +1,6 @@
 ---
 name: openspec-review-cycle
-description: Run an automated review-and-fix loop on an OpenSpec change — Codex reviews the code and verifies the implementation against the change artifacts, then a subagent applies the findings — repeating until the review comes back clean or the cycle budget is spent, then always closing with one more review pass so the last round of fixes is verified rather than assumed. Use when asked to review, verify, and fix an OpenSpec change end to end, run a Codex review loop, or hand a code review to Codex and the fixes to Claude.
+description: Run an automated review-and-fix loop on an OpenSpec change — Codex, or Claude when asked, reviews the code and verifies the implementation against the change artifacts, then a subagent applies the findings — repeating until the review comes back clean or the cycle budget is spent, then always closing with one more review pass so the last round of fixes is verified rather than assumed. Use when asked to review, verify, and fix an OpenSpec change end to end, run a Codex review loop, or hand a code review to Codex and the fixes to Claude.
 disable-model-invocation: true
 ---
 
@@ -8,23 +8,23 @@ disable-model-invocation: true
 
 Two-agent loop over one OpenSpec change:
 
-1. **Codex reviews** (read-only) — code review plus spec verification in a single pass.
+1. **A reviewer** (read-only) — code review plus spec verification in a single pass. Codex by default, Claude when the user asks for it.
 2. **A subagent applies** the findings with the `apply-code-review` skill.
 3. Repeat until the review is clean, the loop stops converging, or the cycle budget runs out.
 4. **Closing review** (read-only, no fixes) whenever the last apply pass changed the tree.
 
 The invariant behind step 4: **an apply pass is never the last thing the loop does.** A cycle that ends in edits ends with an unverified claim — "fixes were applied" is not "the fixes worked". The closing review turns that claim into a verdict the user or an orchestrating agent can act on.
 
-Codex never writes. The applying subagent never reviews. Keeping those roles separate is the point of the skill — do not collapse them.
+The reviewer never writes. The applying subagent never reviews. Keeping those roles separate is the point of the skill — do not collapse them.
 
 ## Preconditions
 
 Check these before starting; stop and report if one fails.
 
-- `codex --version` succeeds. If not: the loop cannot run, tell the user to install the Codex CLI.
+- The default Codex reviewer needs `codex --version` to succeed. A Claude reviewer runs as a subagent and needs no CLI check — unless the user named an effort level, which forces the subprocess path and so needs `claude --version`. If the required CLI is missing, the loop cannot run — tell the user which one.
 - The working directory is a git repo with an `openspec/` root (or the user named an OpenSpec store).
-- `openspec --version` succeeds. If not, skip every `openspec` command below and let Codex's skill handle discovery.
-- The Codex side has a code-review skill and an `openspec-verify-change` skill available. If `$code-review` does not resolve in this environment, fall back to the inline review brief in [Review prompt](#review-prompt).
+- `openspec --version` succeeds. If not, skip every `openspec` command below and let the reviewer's skill handle discovery.
+- The reviewer has a code-review skill and an `openspec-verify-change` skill available. If the code-review skill does not resolve in the reviewer's environment, fall back to the inline review brief in [Review prompt](#review-prompt).
 - The `apply-code-review` skill is available to subagents. If not, inline its decision procedure (Applied / Declined with reason / Deferred with reason) into the subagent prompt.
 
 ## Inputs
@@ -35,12 +35,13 @@ Parse these from the user's request. Ask only about the change name, and only wh
 | --- | --- | --- |
 | Change name | none — must resolve | Run `openspec list --json`; if the request names one change unambiguously use it, otherwise use **AskUserQuestion** to let the user pick. Never guess. |
 | Max cycles | `3` | One cycle = one review pass plus one apply pass. A closing review follows the last apply pass that changed the tree, so `N` cycles means up to `N + 1` review passes. `1` = one review, one apply, one closing review. Use review-only mode to skip applying entirely. |
-| Codex model | unset | Omit `-m` so Codex uses the user's `~/.codex/config.toml` default. Pass whatever model string the user names through verbatim. |
-| Reasoning effort | unset | When the user asks for more or less thinking, add `-c model_reasoning_effort=<none\|minimal\|low\|medium\|high\|xhigh>`. |
+| Reviewer | `codex` | "have Claude review", "reviewer: claude", "review with opus at xhigh" → run every review pass as a read-only **subagent** instead of `codex exec`, falling back to a `claude -p` subprocess only when an effort level was named. Nothing else about the loop changes. See [Step 1](#step-1--review-pass). |
+| Reviewer model | unset | Pass the model string the user names through verbatim — Codex `-m <model>`, a Claude subagent's `model` parameter, a Claude subprocess's `--model <alias-or-full-id>`. Unset means the default the reviewer would use anyway (`~/.codex/config.toml`, the agent definition's model, or the Claude CLI's configured model). |
+| Reasoning effort | unset | Only when the user asks for more or less thinking. Codex: `-c model_reasoning_effort=<none\|minimal\|low\|medium\|high\|xhigh>`. Claude: `--effort <low\|medium\|high\|xhigh\|max>`, which a subagent cannot take — naming an effort level is what switches a Claude reviewer to the subprocess path. Map the user's words to the nearest level the chosen reviewer supports, and say which level you picked. |
 | Review scope | this branch's work vs its base | If the user states a scope in any form, use it. Only when they say nothing about scope, fall back to the base-branch default. See [Resolving the review scope](#resolving-the-review-scope). |
 | Review-only | off | "just review", "no fixes", "dry run" → run cycle 1's review, report, stop before applying. No apply pass runs, so that review is already terminal — do not follow it with a redundant closing review. |
 
-Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · max 3 cycles + closing review · model: config default · scope: git diff <resolved range>`.
+Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · reviewer: codex (model: config default) · max 3 cycles + closing review · scope: git diff <resolved range>`. For a Claude reviewer, say which form it takes — `reviewer: claude subagent (model: opus)` or `reviewer: claude -p (model: opus, effort: xhigh)`.
 
 ### Resolving the review scope
 
@@ -105,9 +106,11 @@ Record the same two values again immediately **before each apply pass** — that
 
 ## The cycle
 
-### Step 1 — Review pass (Codex)
+### Step 1 — Review pass
 
-Write the prompt to `$RUN_DIR/cycle-<n>-prompt.md`, then run Codex read-only, feeding the prompt on stdin so nothing has to be shell-quoted:
+Write the prompt to `$RUN_DIR/cycle-<n>-prompt.md`, then run the reviewer read-only. The CLI paths take the prompt on stdin so nothing has to be shell-quoted.
+
+**Codex — the default reviewer:**
 
 ```bash
 codex exec \
@@ -121,7 +124,41 @@ Add `-m <model>` and `-c model_reasoning_effort=<level>` only when the user aske
 
 `--sandbox read-only` is not optional. It is the guarantee that the reviewer cannot edit the code it is reviewing.
 
-Run this in the background — a thorough review routinely exceeds ten minutes — and wait for it to finish rather than polling on a short timer. If Codex exits non-zero or `cycle-<n>-review.md` is empty, do not retry blindly: report the exit code and the tail of stdout, and stop.
+**Claude — when the user asked for a Claude reviewer:**
+
+Spawn a subagent with the **Agent** tool. Do not start a second `claude` process: a subagent already runs inside this session, so it inherits the repo's agent instructions and skills, needs no separate startup or auth, and its transcript stays out of this conversation's context.
+
+Use a read-only agent type — `Explore` where the environment offers it. Pass the contents of `$RUN_DIR/cycle-<n>-prompt.md` as the agent's prompt, and write its final report to `$RUN_DIR/cycle-<n>-review.md` yourself: a subagent answers to you, not to a file, so nothing lands on disk unless you save it.
+
+Three adjustments to the prompt on this path:
+
+- **Skills are named in prose, not with Codex's `$skill` tokens.** Replace the prompt's first line with `Use the code-review skill, then use the openspec-verify-change skill on the change <change-name>.` Everything else in the prompt is identical, the `REVIEW_STATUS:` footer included.
+- **Ask for the whole review as the final message.** The agent's report is the only thing that reaches you; a summary of a review is not a review.
+- **Say it must not edit anything.** A read-only agent type already enforces this, but the instruction also keeps the agent from proposing an implementation plan instead of reporting findings.
+
+Pass the user's model through the Agent tool's `model` parameter when they named one.
+
+**Only when the user named an effort level**, fall back to a subprocess — the Agent tool takes a model override but no effort override, so a subagent's effort comes from its definition's frontmatter and cannot be chosen per run:
+
+```bash
+(cd "$REPO_ROOT" && claude -p \
+  --permission-mode plan \
+  --permission-prompts none \
+  --disallowed-tools "Edit Write NotebookEdit ExitPlanMode" \
+  --effort <low|medium|high|xhigh|max> \
+  < "$RUN_DIR/cycle-<n>-prompt.md" \
+  > "$RUN_DIR/cycle-<n>-review.md")
+```
+
+Add `--model <model>` too when the user named one. The same three prompt adjustments apply, plus three rules specific to the subprocess:
+
+- **Read-only is enforced by permissions, not by a sandbox.** `plan` mode plus the denied write tools plus `--permission-prompts none` (nothing can be approved — no human is watching a `-p` run) is what holds the reviewer back; there is no OS-level guarantee the way `--sandbox read-only` gives one. So after every subprocess review pass, compare `git rev-parse HEAD` and `git status --porcelain` against the values recorded at [Setup](#setup). If the tree moved, stop and tell the user — do not apply findings from a pass that also edited the code. A read-only subagent needs no such check.
+- **`ExitPlanMode` is denied on purpose.** Without it, plan mode invites the reviewer to exit with a plan instead of a review.
+- **There is no `--cd` and no `-o`.** Run it from `$REPO_ROOT` as above; the final assistant message is the review and arrives on stdout, so redirect it.
+
+Use the same reviewer, model, and effort for every cycle of a run and for the closing review. Switching mid-loop makes "the findings stopped moving" unreadable — a new reviewer's fresh findings look identical to a lack of convergence.
+
+Run a CLI reviewer in the background — a thorough review routinely exceeds ten minutes — and wait for it to finish rather than polling on a short timer. If it exits non-zero or `cycle-<n>-review.md` is empty, do not retry blindly: report the exit code and the tail of stderr, and stop. A subagent already runs in the background; if it comes back without a review, report what it did return and stop, rather than re-spawning it.
 
 #### Review prompt
 
@@ -155,7 +192,7 @@ If `$code-review` does not resolve in this environment, replace that token with 
 
 Include this block verbatim in every review prompt — cycle 1, cycles 2+, and the closing review.
 
-A review that names a defect without prescribing its repair costs a whole extra cycle, because the applying agent has to guess and the next review disagrees with the guess. A review that fixes one instance of a rule violation and misses its three siblings costs another. Most cycles past the first are spent on those two failures rather than on the code.
+A finding the applying agent cannot act on costs a whole extra cycle, and so does a finding that names one instance of a rule violation and misses its three siblings. Most cycles past the first are spent on those two failures rather than on the code. The reviewer's job is to state the problem precisely enough to act on — not to write the fix; the applying agent owns the implementation.
 
 ```
 ## How to write each finding — mandatory format
@@ -168,11 +205,13 @@ For each finding give, in this order:
 2. **Problem** — one sentence saying what is wrong and which rule, requirement, or defect it
    is. Cite the agent-instruction clause or the spec requirement verbatim when the finding
    comes from one.
-3. **Prescribed fix** — the exact change to make, as a fenced code block or unified diff, not
-   a description of what should change. A rename gives the old and new identifier; a deletion
-   names exactly what to delete.
-4. **Done when** — a one-line check the applying agent can use to confirm the fix landed (a
-   test name, a build outcome, an observable behavior).
+3. **Done when** — a one-line check that shows the finding is resolved (a test name, a build
+   outcome, an observable behavior).
+
+**Do not write the fix.** No patches, no diffs, no replacement code, no replacement prose. Say
+what is wrong and what has to be true afterwards; the applying agent chooses the
+implementation. A rename is the exception, because there the new identifier *is* the finding:
+give the old and new name. A deletion says exactly what to delete.
 
 **Report the class, not the instance.** Before you write a finding that cites a rule, search
 the whole scope for every other place the same rule is broken and name them all in that one
@@ -180,22 +219,18 @@ finding. A rule finding that lists one of four occurrences guarantees another re
 the remaining three. If you cannot sweep exhaustively, say so in the finding and give the
 search you would run.
 
-**Prescribe the whole edit.** Your diff must leave the symbol, member group, or test it
-touches in a consistent state. If removing a member would break a caller or a test elsewhere
-in scope, the diff removes or updates that too — do not hand over a fix that only compiles
-after the applier improvises.
-
 **Comment findings are delete-only.** You may say a comment is factually wrong, forbidden by
-a named rule, or duplicates rationale that belongs elsewhere, and prescribe its deletion.
-Never prescribe replacement prose: a paragraph you author this cycle is a paragraph the next
-review argues with. Wording you merely dislike is not a finding.
+a named rule, or duplicates rationale that belongs elsewhere, and ask for its deletion. Do not
+supply replacement prose: a paragraph you author this cycle is a paragraph the next review
+argues with. Wording you merely dislike is not a finding.
 
-**Style findings need a named rule.** Cite the clause, name an existing file that shows the
-accepted pattern, and give the literal replacement text. A style observation that no rule in
-this repo's instruction files supports is not a finding. Your own taste is not the standard.
+**Style findings need a named rule.** Cite the clause and name an existing file that shows the
+accepted pattern. A style observation that no rule in this repo's instruction files supports is
+not a finding. Your own taste is not the standard.
 
-If you cannot state the prescribed fix concretely, the finding is not ready — drop it, or put
-it under `## Consider` and mark it explicitly as a judgement call the applier may decline.
+If you cannot state concretely what is wrong and what "resolved" looks like, the finding is not
+ready — drop it, or put it under `## Consider` and mark it explicitly as a judgement call the
+applier may decline.
 
 Group findings under `## Must fix`, `## Should fix`, `## Consider`.
 
@@ -206,7 +241,7 @@ report CLEAN.
 
 The last paragraph is load-bearing. Some code-review skills append a footer telling the reviewer that every finding is in scope and that declining needs a stated reason; read alone, that biases the reviewer toward always emitting something. The explicit permission to return CLEAN is what stops a converged loop from grinding on for two more cycles of comment polish.
 
-Cycles 2+ append the previous ledger so Codex reviews the *current* state with memory of what was decided. Keep the same `How to write a finding` block, and add:
+Cycles 2+ append the previous ledger so the reviewer judges the *current* state with memory of what was decided. Keep the same `How to write a finding` block, and add:
 
 ```
 This is review cycle <n> of <max>. The previous review's findings were actioned as follows:
@@ -218,7 +253,7 @@ Re-review the current state of the change:
 - For each declined finding, judge whether the stated reason holds. If it does, drop the finding. If it does not, raise it again with a direct rebuttal of the reason.
 - Do not repeat deferred findings that were tracked somewhere.
 - Raise anything new you now see — across the whole scope, not only near the lines the last pass edited. Verifying the previous fix is one step, not the frame for this review; a finding four lines from the last edit usually means the earlier pass under-read that region, so read each touched file whole before reporting.
-- Text the previous cycle's review told the applier to write is your own output, not the author's work. Do not raise a finding against it unless it is factually wrong about the code — and then prescribe deleting it, never rewriting it.
+- Comments and documentation the previous cycle's findings caused to be written exist because this loop asked for them. Do not raise a finding against that text unless it is factually wrong about the code — and then ask for its deletion, not a rewrite.
 - Any code you cite this cycle that was already present at cycle 1 means the earlier passes under-read that file. Read every file the previous fixes touched from top to bottom before reporting, so its siblings surface now rather than next cycle.
 ```
 
@@ -253,9 +288,9 @@ The review is at <RUN_DIR>/cycle-<n>-review.md. It contains both code-review fin
 OpenSpec verification findings for the change "<change-name>". Read it and apply it to the
 working tree.
 
-Each finding carries a prescribed fix and a "Done when" check. Apply the prescribed fix as
-written unless it is factually wrong against the current code; when you deviate, say exactly
-how and why in the ledger.
+Each finding states a problem and a "Done when" check, not a patch. You own the
+implementation: make the smallest change that satisfies the check, and say in the ledger what
+you did.
 
 Sweep for siblings. For every finding that cites a rule — a guideline clause, a convention, a
 requirement — search the whole change for other places that break the same rule and fix those
@@ -263,11 +298,10 @@ too, whether or not the review anchored them. List the extras you fixed in the l
 the finding that prompted the sweep. A rule fixed at one of four call sites costs another
 review cycle for the other three.
 
-Report incomplete prescriptions. If a prescribed diff edits part of a symbol, member group, or
-test and leaves a related part unmentioned — deleting two operators of six, updating one
-overload of three — say so in the ledger rather than silently choosing. State what you did
-with the unmentioned part and why. Do not extend a deletion past what the finding names when
-extending it would break a passing test the review never mentioned; flag it instead.
+Where a finding's boundary is ambiguous — which of six operators it means, which of three
+overloads — say in the ledger what you did and why rather than deciding silently. Do not
+extend a fix past what the finding names when extending it would break a passing test the
+review never mentioned; flag it instead.
 
 Priority rule: the change artifacts under openspec/changes/<change-name>/ are authoritative.
 Where a code-review finding contradicts a spec-verification finding, the spec wins — decline
@@ -311,7 +345,7 @@ Otherwise increment `n` and go back to Step 1.
 
 ### Step 5 — Closing review (no apply pass)
 
-Write the prompt below to `$RUN_DIR/closing-prompt.md`, then run the same invocation as Step 1 against its own artifacts:
+Write the prompt below to `$RUN_DIR/closing-prompt.md`, then run the same reviewer with the same model and effort flags against its own artifacts — the Codex form:
 
 ```bash
 codex exec \
@@ -321,7 +355,9 @@ codex exec \
   - < "$RUN_DIR/closing-prompt.md"
 ```
 
-Same `-m` / `-c model_reasoning_effort` handling, same background execution, and the same failure handling: if Codex exits non-zero or the output is empty, report the exit code and the tail of stdout, do not retry blindly, and **do not report the change as verified** — an unrun closing review is `HALTED`, not `CLEAN`.
+or the Claude form from [Step 1](#step-1--review-pass) — the same subagent or subprocess the cycles used — with `closing-prompt.md` and `closing-review.md` in place of the cycle files.
+
+Same background execution and the same failure handling: if the reviewer exits non-zero or the output is empty, report the exit code and the tail of stdout, do not retry blindly, and **do not report the change as verified** — an unrun closing review is `HALTED`, not `CLEAN`.
 
 Prompt:
 
@@ -362,7 +398,7 @@ REVIEW_STATUS: CLEAN
 REVIEW_STATUS: FINDINGS
 ```
 
-The finding format matters most here. Nothing in this loop will fix what the closing review reports, so each finding has to be repairable by whoever picks it up later, without this run's context.
+The finding format matters most here. Nothing in this loop will fix what the closing review reports, so each finding has to be actionable for whoever picks it up later, without this run's context.
 
 **The closing review is terminal.** It never triggers an apply pass and never starts another cycle, however severe its findings. A must-fix here goes into the final report for the user or the orchestrating agent to act on — do not quietly fix it, and do not extend the cycle budget on your own.
 
@@ -394,18 +430,18 @@ CYCLE_RESULT: OPEN_FINDINGS
 CYCLE_RESULT: HALTED
 ```
 
-`CLEAN` only when the terminal review — the last cycle review or the closing review, whichever ran last — came back clean. `OPEN_FINDINGS` when anything is outstanding, including declined and deferred findings. `HALTED` for a broken build or a Codex run that failed to produce a review.
+`CLEAN` only when the terminal review — the last cycle review or the closing review, whichever ran last — came back clean. `OPEN_FINDINGS` when anything is outstanding, including declined and deferred findings. `HALTED` for a broken build or a reviewer run that failed to produce a review.
 
 Never run `openspec archive` or `openspec sync`, and never commit. The change stays open for the user to verify.
 
 ## Failure modes
 
-- **Codex edits files anyway.** It cannot under `--sandbox read-only`. If the tree changed during a review pass, something else is running — stop and tell the user.
-- **Findings ping-pong** — cycle 2 reverses cycle 1. Usually the two reviewers disagree on the same code. Stop the loop and put both positions in the report rather than letting the tree oscillate. The exception is a reversal whose fix is a *deletion* of text an earlier cycle prescribed: that settles the disagreement instead of continuing it, so apply it, forbid a third rewrite in the apply prompt, and note both positions in the final report.
+- **The reviewer edits files.** Codex cannot under `--sandbox read-only`, and neither can a read-only subagent, so there the cause is something else running in the tree. A `claude -p` subprocess is held back by permissions alone, so it is the one reviewer that can actually do this. Either way: stop, tell the user, and do not apply findings from that pass.
+- **Findings ping-pong** — cycle 2 reverses cycle 1. Usually the two reviewers disagree on the same code. Stop the loop and put both positions in the report rather than letting the tree oscillate. The exception is a reversal whose fix is a *deletion* of text an earlier cycle's findings caused to be written: that settles the disagreement instead of continuing it, so apply it, forbid a third rewrite in the apply prompt, and note both positions in the final report.
 - **Each cycle finds siblings of the last cycle's findings** — the same rule broken in a new file, the same class of defect one symbol over. The reviewer is reporting instances where it should report classes. Tighten the sweep instruction in the next review prompt and tell the apply pass to fix the class; do not just keep spending cycles.
 - **A finding lands on code that was present at cycle 1 and nothing touched since.** The reviewer is sampling different regions each pass rather than covering the scope, so a clean verdict means "nothing found this pass", not "nothing there". Say that plainly in the final report instead of presenting a late clean review as full coverage.
 - **The closing review raises a new must-fix.** Expected, not a bug — it means the change is not done. Report it under `CYCLE_RESULT: OPEN_FINDINGS`; do not spawn cycle `n+1`.
 - **The closing review contradicts the last apply pass's own ledger** — the ledger says Applied, the review says unresolved. Trust the review: the ledger is self-reported. Put both positions in the report.
-- **Review names a change that does not exist.** Codex picked a different change than intended. Re-resolve the name with `openspec list --json` and restart cycle 1.
+- **Review names a change that does not exist.** The reviewer picked a different change than intended. Re-resolve the name with `openspec list --json` and restart cycle 1.
 - **Findings land on files this change never touched.** The base branch was resolved wrong and the diff swallowed the base's commits. Stop before applying anything, re-resolve the base, and restart cycle 1 — do not let the apply pass edit another branch's work.
-- **Empty review output with a zero exit code.** Usually a model or auth problem on the Codex side. Report the tail of stdout; do not silently treat it as clean.
+- **Empty review output with a zero exit code.** Usually a model or auth problem on the reviewer's side. Report the tail of stdout; do not silently treat it as clean.
