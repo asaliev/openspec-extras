@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Orchestrate Change"
+  short_description: "Implement an OpenSpec change group by group with fresh implementer subagents, a review gate after each group, and a final whole-branch review."
+  default_prompt: "Orchestrate the implementation of an OpenSpec change: dispatch one implementer subagent per task group, review each group for spec compliance and quality, run the fix loop, then a final review against the change artifacts."

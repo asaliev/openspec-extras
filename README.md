@@ -31,6 +31,24 @@ The skill keeps `openspec-apply-change`'s selection, context loading, and report
 
 The orchestrator owns `tasks.md`, the diff review, and the build: subagents never tick checkboxes, never touch files outside their assigned set, and never run the test suite while siblings are working in the same tree.
 
+### `openspec-orchestrate-change`
+
+Orchestrate an OpenSpec change implementation.
+
+The session acts as an orchestrator and never writes product code itself. For each task group (a `## N.` section of `tasks.md`):
+
+- a fresh **implementer** subagent works from a brief, writes tests for the spec scenarios the group satisfies, and commits
+- a separate **reviewer** gates the group's commits on spec compliance and code quality
+- a bounded **fix loop** resumes the implementer, escalates to a stronger model on the last round, and ends in a scoped re-review
+
+After the last group, one whole-branch review on the most capable model verifies the change against its artifacts. One fix wave and one scoped re-review follow it.
+
+The task group, not each checkbox, is the unit of dispatch. That keeps a typical change to roughly two agents per group rather than two per checkbox. Every model is chosen explicitly by role. A git-ignored ledger under `.openspec-extras/orchestrate/<change>/` lets an interrupted run resume without redoing finished groups.
+
+The orchestrator rules on implementation and design questions without stopping, and records every ruling for the final report. It may correct `tasks.md` and `design.md` in place so the archived change stays truthful. It never rules on specified behaviour: anything that would add, narrow, or drop a spec requirement or scenario stops the run and asks you. Commits land on a feature branch, and the skill asks before committing to the default branch. The change is never archived, synced, or pushed.
+
+Requires a harness that can spawn subagents with an explicit model. This skill sets `disable-model-invocation: true`, so it runs only when you invoke it.
+
 ### `openspec-review-cycle`
 
 Run an automated review-and-fix loop on a single OpenSpec change.
@@ -60,6 +78,7 @@ Project-local install:
 npx skills add asaliev/openspec-extras --skill openspec-align-specs
 npx skills add asaliev/openspec-extras --skill openspec-apply-change-parallel
 npx skills add asaliev/openspec-extras --skill openspec-review-cycle
+npx skills add asaliev/openspec-extras --skill openspec-orchestrate-change
 ```
 
 Global install:

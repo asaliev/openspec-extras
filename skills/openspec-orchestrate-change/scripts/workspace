@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Resolve and ensure the directory one orchestration run keeps its artifacts in:
+# ledger, group briefs, implementer reports, review packages. Print its absolute path.
+#
+# One directory per change (<repo-root>/.openspec-extras/orchestrate/<change>/) so a
+# run on another change in the same tree can never read or overwrite this one's ledger.
+# .openspec-extras/ is named after this repo and shared by its skills, so it cannot
+# collide with the dot-names OpenSpec itself writes (.openspec.yaml, .openspec-store/).
+#
+# It lives in the working tree, not under .git/, because some harnesses deny agent
+# writes inside .git/ — which would stop an implementer from writing its report.
+# A self-ignoring .gitignore keeps it out of `git status` and out of commits without
+# touching any tracked file.
+#
+# Usage: workspace CHANGE_NAME
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: workspace CHANGE_NAME" >&2
+  exit 2
+fi
+
+change=$1
+case "$change" in
+  ""|.|..|*/*) echo "not a change name: $change" >&2; exit 2 ;;
+esac
+
+root=$(git rev-parse --show-toplevel)
+base="$root/.openspec-extras"
+mkdir -p "$base/orchestrate/$change"
+printf '*\n' > "$base/.gitignore"
+CDPATH= cd -- "$base/orchestrate/$change" && pwd

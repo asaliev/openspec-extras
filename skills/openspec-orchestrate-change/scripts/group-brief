@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Extract one task group — a "## <N>." section — from an OpenSpec tasks file into a
+# brief the implementer reads in one call, so the group's text never has to pass
+# through the orchestrator's context.
+#
+# Usage: group-brief WORKSPACE TASKS_FILE GROUP_NUMBER
+# Writes <WORKSPACE>/group-<N>-brief.md and prints its path.
+set -euo pipefail
+
+if [ $# -ne 3 ]; then
+  echo "usage: group-brief WORKSPACE TASKS_FILE GROUP_NUMBER" >&2
+  exit 2
+fi
+
+ws=$1
+tasks=$2
+n=$3
+[ -d "$ws" ] || { echo "no such workspace: $ws" >&2; exit 2; }
+[ -f "$tasks" ] || { echo "no such tasks file: $tasks" >&2; exit 2; }
+
+out="$ws/group-${n}-brief.md"
+
+awk -v n="$n" '
+  /^```/ { infence = !infence }
+  !infence && /^##[ \t]/ {
+    ingroup = ($0 ~ ("^##[ \t]+" n "([.:)[ \t]|$)"))
+  }
+  ingroup { print }
+' "$tasks" > "$out"
+
+if [ ! -s "$out" ]; then
+  rm -f "$out"
+  echo "group ${n} not found in ${tasks} (no heading matching '## ${n}.')" >&2
+  exit 3
+fi
+
+echo "$out"

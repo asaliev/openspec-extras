@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Write a review package — commit list, stat summary, and the net diff with extended
+# context — to one file the reviewer reads in a single call. Passing the recorded
+# BASE (never HEAD~1) keeps multi-commit groups intact.
+#
+# Usage: review-package WORKSPACE BASE HEAD
+# Writes <WORKSPACE>/review-<base7>..<head7>.diff and prints its path.
+set -euo pipefail
+
+if [ $# -ne 3 ]; then
+  echo "usage: review-package WORKSPACE BASE HEAD" >&2
+  exit 2
+fi
+
+ws=$1
+base=$2
+head=$3
+[ -d "$ws" ] || { echo "no such workspace: $ws" >&2; exit 2; }
+
+git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
+git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&2; exit 2; }
+
+# A wrong-branch HEAD yields a range that is empty or not rooted at BASE; either
+# would silently produce a bogus package.
+git merge-base --is-ancestor "$base" "$head" || { echo "HEAD is not a descendant of BASE: ${base}..${head}" >&2; exit 3; }
+[ "$(git rev-list --count "${base}..${head}")" -gt 0 ] || { echo "empty commit range: ${base}..${head}" >&2; exit 3; }
+
+out="$ws/review-$(git rev-parse --short "$base")..$(git rev-parse --short "$head").diff"
+
+{
+  echo "# Review package: ${base}..${head}"
+  echo
+  echo "## Commits"
+  git log --oneline "${base}..${head}"
+  echo
+  echo "## Files changed"
+  git diff --stat "${base}..${head}"
+  echo
+  echo "## Diff"
+  git diff -U10 "${base}..${head}"
+} > "$out"
+
+echo "$out"
