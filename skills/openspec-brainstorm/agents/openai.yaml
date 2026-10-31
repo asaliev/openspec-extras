@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Brainstorm"
+  short_description: "Brainstorm an idea into an approved design, then hand it to OpenSpec to create or update the change artifacts."
+  default_prompt: "Brainstorm this with me before we create an OpenSpec change: classify the request, ask one question at a time, propose approaches, present the design for approval, then hand the agreed brief to OpenSpec."

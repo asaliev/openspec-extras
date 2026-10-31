@@ -31,6 +31,22 @@ The skill keeps `openspec-apply-change`'s selection, context loading, and report
 
 The orchestrator owns `tasks.md`, the diff review, and the build: subagents never tick checkboxes, never touch files outside their assigned set, and never run the test suite while siblings are working in the same tree.
 
+### `openspec-brainstorm`
+
+Brainstorm an idea into an approved design, then hand it to OpenSpec.
+
+A replacement for `openspec-explore` in flows that want structure before a change exists. The dialogue is borrowed from superpowers' brainstorming skill:
+
+- the request is **classified** out loud as a spike, a bounded change, or architectural work, and the user can override
+- intent is written back as a short note the user can correct before it becomes the brief
+- clarifying questions come **one at a time**, multiple choice where possible
+- architectural work gets 2–3 approaches with a recommendation, then a design presented **in sections** with approval after each
+- a hard gate: no artifact is written and no code is touched until the presented design is approved
+
+What is not borrowed is the output. The skill writes no design document and no implementation plan of its own. The approved design is written back as a brief in chat, and OpenSpec captures it through its normal artifact flow — `openspec new change`, then each artifact from `openspec instructions` — or by updating an existing change's artifacts. The brief is content; the schema is form. The skill stops at the artifacts and never applies, implements, or archives.
+
+Requires the `openspec` CLI. Works alongside the upstream `openspec-propose`, `openspec-new-change`, and `openspec-continue-change` skills when they are installed, and runs the same CLI flow inline when they are not.
+
 ### `openspec-orchestrate-change`
 
 Orchestrate an OpenSpec change implementation.
@@ -79,6 +95,7 @@ npx skills add asaliev/openspec-extras --skill openspec-align-specs
 npx skills add asaliev/openspec-extras --skill openspec-apply-change-parallel
 npx skills add asaliev/openspec-extras --skill openspec-review-cycle
 npx skills add asaliev/openspec-extras --skill openspec-orchestrate-change
+npx skills add asaliev/openspec-extras --skill openspec-brainstorm
 ```
 
 Global install:
@@ -149,6 +166,33 @@ Expected behavior:
 - After each wave the agent reads the diff, runs the project's build and tests once, and ticks only the tasks that verified.
 - If nothing can safely run in parallel, it says so and runs the plain sequential flow with no subagents.
 - Pauses happen at wave boundaries; failed tasks are repaired inline rather than re-delegated, and the change is never archived, synced, or committed.
+
+### `openspec-brainstorm`
+
+Example prompts:
+
+```text
+Use openspec-brainstorm: I want to add rate limiting to the public API.
+```
+
+```text
+/openspec-brainstorm add-auth-system — the OAuth integration is more complex than expected
+```
+
+```text
+Brainstorm with me whether we can stream exports instead of batching them.
+```
+
+Expected behavior:
+
+- The agent states the path it chose — spike, bounded, or architectural — before asking anything, so you can override it. When in doubt it takes the heavier path, and it never downgrades mid-task.
+- It runs `openspec list --json` first, and reads an active change's artifacts when one is named or clearly relevant.
+- Questions arrive one per message. Architectural work gets 2–3 approaches with a recommendation, then a design in sections with a check after each.
+- Nothing is written until you approve the presented design. Read-only exploration of the code and the change is allowed throughout.
+- On approval the agent writes back a design brief and asks how to hand off: create the change and generate all artifacts, create it and step through artifacts one at a time, update the existing change, or stop.
+- Artifacts take their shape from `openspec instructions`, not from the brief. Anything the schema needs that the brainstorm did not settle becomes a question, not an invention.
+- A spike ends in a recommendation, not a change. Anything built during it is labelled throwaway.
+- The skill stops at the artifacts and points at `openspec-apply-change`, `openspec-apply-change-parallel`, or `openspec-orchestrate-change` for implementation.
 
 ### `openspec-review-cycle`
 
