@@ -1,6 +1,6 @@
 # Scoped Re-review Prompt
 
-Use this template after each fix round, and once after the final review's fix wave. It verdicts each finding and checks the fix diff for new breakage — it is not a fresh review.
+Use this template after each fix round — a group's, or the final fix loop's. It verdicts each finding and checks the fix diff for new breakage — it is not a fresh review.
 
 ```
 Agent (read-only type where available):
@@ -70,4 +70,4 @@ Agent (read-only type where available):
 - `<FINDINGS>` — the open Critical and Important findings, spec gaps, and confirmed ⚠️ items, copied verbatim, one per bullet
 - `<FIX_BASE_SHA>` — the head the previous review or re-review saw
 - `<PACKAGE_FILE>` — the path `scripts/review-package "$WS" "$FIX_BASE" HEAD` printed
-- For the final fix wave, `<BRIEF_FILE>` is the final review's output file instead of a group brief
+- For the final fix loop, `<BRIEF_FILE>` is `$WS/final-validation.md` instead of a group brief, and `<FINDINGS>` is its Holds list — in later rounds, only the items still open. Each item's "Done when" is the test for ADDRESSED.

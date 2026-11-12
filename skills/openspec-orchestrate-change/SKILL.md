@@ -1,6 +1,6 @@
 ---
 name: openspec-orchestrate-change
-description: Implement an OpenSpec change as an orchestrator — one fresh implementer subagent per task group, a spec-compliance and code-quality review gate after each group, a bounded fix loop with model escalation, and one whole-branch review against the change artifacts at the end. Use when asked to orchestrate, drive, or implement an OpenSpec change with subagents and review gates.
+description: Implement an OpenSpec change as an orchestrator — one fresh implementer subagent per task group, a spec-compliance and code-quality review gate after each group, a bounded fix loop with model escalation, and a whole-branch review against the change artifacts at the end whose findings a separate validator confirms or rejects, with every confirmed finding fixed. Use when asked to orchestrate, drive, or implement an OpenSpec change with subagents and review gates.
 disable-model-invocation: true
 ---
 
@@ -13,7 +13,7 @@ This session is the **orchestrator**: it never writes product code. For every ta
 3. **Fix loop** until the review is clean, or the round cap trips and the orchestrator adjudicates.
 4. **Tick** the group's checkboxes, ledger the result, move on without checking in.
 
-After the last group, one **final review** of the whole branch against the change artifacts, one fix wave, one scoped re-review.
+After the last group, one **final review** of the whole branch against the change artifacts, a **validation** pass that decides which of its findings hold up, and the bounded fix loop over every finding that does — whatever its severity.
 
 The orchestrator owns `tasks.md`, the ledger, and every ruling. Implementers never review, reviewers never write, and nobody but the orchestrator ticks a checkbox.
 
@@ -80,7 +80,7 @@ The workspace is git-ignored. Everything this run produces goes there: `progress
 Conversation memory does not survive compaction. Orchestrators that lost their place have re-dispatched whole sequences of finished work — the most expensive failure there is. **The ledger, `tasks.md`, and `git log` are the record; your recollection is not.**
 
 - **No ledger**: create `$WS/progress.md` with the identity line `# Orchestration ledger — change: <name> — changeDir: <changeDir>`.
-- **Ledger exists, identity matches**: resume. A group with a `Group <N>: complete` line is done — never re-dispatch it. A group whose last line is a fix round is mid-loop; resume the loop at the next round.
+- **Ledger exists, identity matches**: resume. A group with a `Group <N>: complete` line is done — never re-dispatch it. A group whose last line is a fix round is mid-loop; resume the loop at the next round. `Final:` lines mark how far the [final review](#final-review) got; resume after the last one, and never re-dispatch a step whose output file is already in the workspace.
 - **Ledger exists, identity names another changeDir**: a same-named change from another root. Stop and ask.
 
 Cross-check with `tasks.md`: a group whose checkboxes are all ticked but has no ledger line was done outside this skill — ledger it as `Group <N>: complete (pre-existing)` and skip it. A partly ticked group is dispatched with a note in its brief that the ticked items exist and need verifying, not redoing.
@@ -110,6 +110,8 @@ Work in three tiers and map them to what the harness offers (in Claude Code: `ha
 | Scoped re-review of a small fix diff | cheap to standard |
 | Last fix round | one tier above the implementer that got stuck |
 | Final review | most capable |
+| Final findings validator | most capable |
+| Final fix implementer | standard or higher |
 
 Turn count beats token price: the cheapest tier routinely takes 2–3× the turns on multi-step work. Use it only where the work is transcription plus testing.
 
@@ -167,7 +169,7 @@ The review must return both verdicts, spec compliance and quality. A report miss
 
 Before the loop, two kinds of findings leave it:
 
-- **Minor** findings go to the ledger as `Group <N>: minor (deferred): <one-liner>`. The final review triages them.
+- **Minor** findings go to the ledger as `Group <N>: minor (deferred): <one-liner>`. They are deferred to the end of the run, not past it: the final review re-checks them, and every one that still holds is fixed in the final fix loop.
 - A finding that **conflicts with the artifacts** — the reviewer wants something the spec, design, or task text says otherwise — is yours to rule on with [Rulings](#rulings) before anything is dispatched.
 
 Everything else — spec ❌, Critical, Important, confirmed ⚠️ — enters the loop. One round is one fix dispatch plus one scoped re-review:
@@ -183,7 +185,7 @@ Never fix findings yourself. Orchestrator fixes skip review and fill the context
 **The breaker.** When the last round still leaves findings open, stop dispatching and adjudicate each one:
 
 - **The reviewer is wrong, or the point is contestable**: `Group <N>: parked — <finding> — Ruling: <why the code stands>`.
-- **Real, but nothing later builds on it**: park it the same way, with a ruling that says it is real and deferred.
+- **Real, but nothing later builds on it**: park it the same way, with a ruling that says it is real. The final review resurfaces it, and the final fix loop fixes it.
 - **Real and load-bearing** — a later group builds on it: rule on the smallest change that unblocks the dependent work, ledger it, and carry it into that group's brief. If it is a gap in specified behaviour, that is a [stop](#stop-conditions).
 
 Adjudicate only at the cap. Adjudicating earlier to end a loop is pre-judging under another name.
@@ -201,17 +203,43 @@ Never start the next group while Critical or Important findings are neither fixe
 
 ## Final review
 
-After the last group:
+After the last group: review, validate, fix. Severity decides the order of the fix list, never its length. A run that fixes only what was labelled Critical or Important ends with a pile of real findings marked "for later", and later does not come.
+
+### 1. Review
 
 ```bash
 PKG=$(bash scripts/review-package "$WS" "$MERGE_BASE" HEAD)
 ```
 
-Dispatch [final-reviewer-prompt.md](final-reviewer-prompt.md) on the most capable tier, read-only, with the package, the ledger path, and the change name. It verifies the whole change against its artifacts — what `openspec-verify-change` checks — reviews the branch as code, and triages the ledger's deferred minors and parked findings.
+Dispatch [final-reviewer-prompt.md](final-reviewer-prompt.md) on the most capable tier, read-only, with the package, the ledger path, and the change name. It verifies the whole change against its artifacts — what `openspec-verify-change` checks — reviews the branch as code, and re-checks the ledger's deferred minors and parked findings.
 
-Save its report to `$WS/final-review.md` yourself — a subagent answers to you, not to a file.
+Save its report to `$WS/final-review.md` yourself — a subagent answers to you, not to a file. Ledger `Final: review (<K> findings)`. On `FINAL_REVIEW: CLEAN`, go to the [final report](#final-report).
 
-If it returns findings, dispatch **one** fix implementer with the complete list — never one per finding. Use [implementer-prompt.md](implementer-prompt.md) with `$WS/final-review.md` as the brief and `$WS/final-fix-report.md` as the report, on the standard tier or higher. Then run exactly one scoped re-review of the fix range. Adjudicate any residuals as in the breaker. There is no second fix wave; residual load-bearing findings go to the user in the final report.
+### 2. Validate
+
+Reviewers over-report, and an implementer handed every claim changes correct code. Judging the list yourself is pre-judging, and judging it by severity is how real findings get deferred. A separate agent decides instead.
+
+Dispatch [final-validator-prompt.md](final-validator-prompt.md) on the most capable tier, read-only, with `$WS/final-review.md`, the same package, and the ledger. It checks every finding — all severities, SUGGESTIONs and Minors included — against the code at HEAD and returns one verdict each. Save its report to `$WS/final-validation.md` and ledger `Final: validation (<H> hold, <R> rejected, <C> conflict, <O> outside)`.
+
+| Verdict | Route |
+| --- | --- |
+| HOLDS | The fix loop below. Every one, whatever its severity. |
+| REJECTED | Closed. The final report lists it with the validator's evidence. |
+| ARTIFACT CONFLICT | Yours, by [Rulings](#rulings). A tasks or design ruling either closes the finding or adds it to the fix list with the amendment. A spec-level conflict is a [stop](#stop-conditions). |
+| OUTSIDE CHANGE | The final report, as a follow-up for the user. Not fixed on this branch. |
+
+Do not overturn a HOLDS or REJECTED verdict. That is the judgment this step takes out of your hands.
+
+### 3. Fix
+
+If nothing holds, go to the final report.
+
+Record `FIX_BASE=$(git rev-parse HEAD)`. Dispatch **one** fix implementer for the whole Holds list — never one per finding — from [implementer-prompt.md](implementer-prompt.md), with `$WS/final-validation.md` as the brief and `$WS/final-fix-report.md` as the report. Then dispatch [re-review-prompt.md](re-review-prompt.md) on `FIX_BASE..HEAD` with the Holds list as its findings. That is round 1.
+
+From there it is the group [fix loop](#4-fix-loop) with the same cap and the same ledger lines under `Final:`: NOT ADDRESSED items and new Critical or Important breakage in the fix diff stay open, rounds before the last resume the fix implementer, and the last round is a fresh implementer one tier up. Two differences:
+
+- Out-of-scope observations from a re-review go to the final report, not the ledger. No later gate will read them.
+- At the cap, a re-review verdict you can show is wrong gets a ruling. Any other held finding still open is a **residual**, not a parked item: there is no later group to carry it. The final report lists it, and the result is `PARTIAL`.
 
 ## Rulings
 
@@ -249,9 +277,9 @@ Then, in `openspec-apply-change`'s completion format:
 
 1. Progress `N/M`, the groups completed this run, and any task left unticked because of a parked gap.
 2. Per group: fix rounds used, parked count, commit range.
-3. Final review verdict, what the fix wave addressed, and every residual finding.
+3. Final review: findings count, the validation split (held / rejected / conflict / outside), fix rounds used, and every residual.
 4. Artifact amendments made to `tasks.md` or `design.md`, with paths.
-5. Deferred minors the final review left for later.
+5. Rejected findings, one line each with the validator's evidence; outside-change findings as follow-ups; out-of-scope observations from the final re-reviews.
 6. Build and test status from the last implementer report, and the branch with its commit range from `MERGE_BASE`.
 
 When the result is `COMPLETE`, delete the workspace (`rm -rf "$WS"`) — git history and the report are the record now. Otherwise keep it; it is what a resumed run reads.
@@ -266,7 +294,7 @@ ORCHESTRATE_RESULT: PARTIAL
 ORCHESTRATE_RESULT: HALTED
 ```
 
-`COMPLETE` when every task is ticked and the final review left no Critical or Important residual. `PARTIAL` when the run finished but something is unticked, parked as a gap, or residual. `HALTED` when a stop condition ended the run early.
+`COMPLETE` when every task is ticked and every finding that held was fixed. `PARTIAL` when the run finished but something is unticked, parked as a gap, or residual. `HALTED` when a stop condition ended the run early.
 
 ## Failure modes
 
@@ -279,6 +307,8 @@ ORCHESTRATE_RESULT: HALTED
 | "The scenario is impractical; I'll rule it out of scope" | Spec behaviour is the user's call. Stop and ask. |
 | "This finding is obviously wrong, I'll drop it" | Adjudicate only at the cap, and every ruling is a ledger line. |
 | "The fix was small, skip the re-review" | Unreviewed fixes are how regressions land. |
+| "It's only Minor; it can wait" | Severity orders the fix list; it does not shorten it. A finding the validator holds gets fixed. |
+| "The validator is wrong about this one" | Overruling it is the pre-judging it exists to stop. Only artifact conflicts are yours. |
 | "I remember which groups are done" | After compaction you do not. Read the ledger and `git log`. |
 | "The implementer spawned its own reviewer — extra assurance" | It duplicated a review seat at full cost. Flag it; the group review is the gate. |
 | "Two groups look independent; run them together" | Parallel implementers break the `BASE..HEAD` ranges every review depends on. |

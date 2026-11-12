@@ -57,7 +57,7 @@ The session acts as an orchestrator and never writes product code itself. For ea
 - a separate **reviewer** gates the group's commits on spec compliance and code quality
 - a bounded **fix loop** resumes the implementer, escalates to a stronger model on the last round, and ends in a scoped re-review
 
-After the last group, one whole-branch review on the most capable model verifies the change against its artifacts. One fix wave and one scoped re-review follow it.
+After the last group, one whole-branch review on the most capable model verifies the change against its artifacts. A separate validator, also on the most capable model, checks every finding against the code and decides which hold up. Every finding that holds is fixed through the same bounded fix loop, whatever its severity. The rest are closed with evidence or reported as follow-ups, so nothing is quietly deferred.
 
 The task group, not each checkbox, is the unit of dispatch. That keeps a typical change to roughly two agents per group rather than two per checkbox. Every model is chosen explicitly by role. A git-ignored ledger under `.openspec-extras/orchestrate/<change>/` lets an interrupted run resume without redoing finished groups.
 

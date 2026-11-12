@@ -47,11 +47,22 @@ Agent (read-only type where available):
     no single group review saw), error handling, duplication between groups, dead code
     left behind by later groups, test quality, and conformance with the instruction files.
 
-    ## Part 3: Triage the ledger
+    ## Part 3: Re-check the ledger
 
-    For each `minor (deferred)` and `parked` line: **fix before merge** or **can wait**,
-    with one line of reasoning. For each `Ruling:` line: **sound** or **challenge**, and
-    why.
+    For each `minor (deferred)` and `parked` line, one of:
+    - **resolved** — cite the file:line that resolves it;
+    - **sound as ruled** — a parked line whose ruling that the code stands still holds;
+    - **still a defect** — report it under Branch review at its real severity, tagged
+      "(ledger)".
+    For each other `Ruling:` line: **sound** or **challenge**, and why.
+
+    ## What to report
+
+    Report every finding you can stand behind, at its real severity, Minor and SUGGESTION
+    included. Do not hold one back because it is small: a separate validator checks each
+    finding against the code, and every one that holds gets fixed. Do not pad the list
+    either: a clean verdict is valid, and every finding the validator rejects is a wasted
+    check.
 
     ## Output
 
@@ -67,7 +78,7 @@ Agent (read-only type where available):
     #### Minor
     Each: file:line, what is wrong, why it matters, how to fix if not obvious.
 
-    ### Ledger triage
+    ### Ledger re-check
 
     ### Verdict
     One or two sentences on whether the change is ready to archive.
@@ -77,4 +88,4 @@ Agent (read-only type where available):
     FINAL_REVIEW: FINDINGS
 ```
 
-Spec CRITICALs, Critical and Important branch findings, and ledger items triaged as **fix before merge** all go into the one fix wave. WARNINGs go in too when they name a scenario with no test. SUGGESTIONs and Minor findings go to the final report.
+Every finding goes to [final-validator-prompt.md](final-validator-prompt.md) — every severity, ledger items and challenged rulings included. Every finding it holds gets fixed; severity only orders the list.

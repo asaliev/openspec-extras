@@ -127,3 +127,12 @@ Agent:
 - `<REPORT_FILE>` — `<workspace>/group-<N>-report.md`
 - `<changeDir>` — from the apply instructions JSON
 - Context lines — only what this group needs; never a history of earlier groups
+
+## Final fix loop
+
+The same template dispatches the final fix implementer, with these substitutions:
+
+- Description `"Fix validated final-review findings"`; the first line names the validated final-review findings of the change instead of a task group.
+- `<BRIEF_FILE>` — `$WS/final-validation.md`. The work is every item under **Holds**, and each item's "Done when" is its acceptance check. The other sections are not this implementer's. Drop the line about the tasks file.
+- `<REPORT_FILE>` — `$WS/final-fix-report.md`, with one entry per held finding: what changed, and the evidence for its "Done when".
+- Add to Boundaries: "Every finding under Holds is in scope. Do not defer or decline one. If one cannot be fixed without changing specified behaviour, report NEEDS_CONTEXT naming it. If it cannot be fixed at all, report BLOCKED naming it and what you tried."
