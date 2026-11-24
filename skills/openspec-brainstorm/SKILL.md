@@ -9,6 +9,8 @@ Turn an idea into a design the user has recognised and approved, then hand it to
 
 The dialogue is borrowed from superpowers' brainstorming: classify the request, understand the intent, propose approaches, present the design in sections, get approval. The output is not. There is no design document under `docs/`, no implementation plan, no spec file in this skill's own format. The approved design lives in the conversation until OpenSpec's artifact flow captures it — proposal, specs, design, tasks, or whatever the active schema asks for — in the shape `openspec instructions` dictates.
 
+One exception: **an approved visual is a file, never a memory.** A mockup, screen sketch, or layout the user approved cannot be captured by prose, and a conversation is not read by whoever implements the change. Every approved visual is saved verbatim into the change and referenced from its design artifact — see [Visual references](#visual-references). A UI change handed off without them is a lost design.
+
 Brainstorming is for thinking, not implementing. Read files, search code, run `openspec` read commands. Never write product code. Never write or edit an OpenSpec artifact before the design that feeds it is approved.
 
 **Store selection:** If the user names a store (a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `context`). Hints printed by commands already carry the flag; keep it on follow-ups.
@@ -111,6 +113,20 @@ Other schemas ask different questions; `openspec instructions <artifact> --chang
 
 Use ASCII diagrams when a shape is clearer drawn than described: system sketches, state machines, data flows, dependency graphs, option comparison tables. A good diagram replaces paragraphs. Draw in chat; this skill has no browser companion.
 
+**A mockup is optional; once approved, it is binding.** When a UI change is clearer shown than described, present a mockup with whatever the harness renders (an inline widget, an artifact, or ASCII when nothing renders). Ask for approval as its own question and record the exact answer, amendments included ("yes, plus the last-sync summary"). From then on it is part of the design and must be saved — see below.
+
+## Visual references
+
+Everything the user approved visually must reach the implementer exactly as approved. Inline widgets and chat drawings vanish with the conversation; skills downstream (`openspec-apply-change`, `openspec-orchestrate-change`, reviewers) read only the change directory.
+
+1. **Keep the source.** When you present a visual, keep its exact source (widget HTML/SVG, artifact file, ASCII block). Do not redraw it later from memory.
+2. **Save it at handoff**, once the change exists, verbatim, under `<changeDir>/mockups/`: `<slug>.html` or `.svg` for rendered mockups (wrap a bare widget fragment in a minimal `<!doctype html>` page so it opens in a browser), `<slug>.md` for ASCII. One file per approved visual.
+3. **Write `<changeDir>/mockups/README.md`**: for each file, the screens and states it shows, the user's approval wording, every amendment made with the approval, and which details are binding (layout, hierarchy, labels, colours) versus illustrative (sample data).
+4. **Reference them from the design artifact.** The design gets a `Visual references` section naming each file, the screens/states it binds, and the rule: the implemented UI matches these mockups; any deviation needs the user's approval. Specs stay behavioural — they describe what happens, the mockups describe how it looks.
+5. **Verify after artifact creation.** When another skill wrote the artifacts (`openspec-propose`, `openspec-ff-change`, …), pass it the mockup paths in its arguments, then open the design artifact and confirm the `Visual references` section is there and names every file. Fix it before you report the handoff done.
+
+With **Stop here**, nothing is written, so the approved visuals are not saved: say so explicitly, and offer to save them to a path the user picks.
+
 ## Handoff to OpenSpec
 
 When the design is approved, write back the **brief** in one message. It restates the agreed understanding and is the input to every artifact:
@@ -122,6 +138,7 @@ When the design is approved, write back the **brief** in one message. It restate
 **What changes** — and what is explicitly out of scope
 **Capabilities and behaviour** — each capability, with its observable behaviour
 **Approach** — the chosen approach, decisions made, alternatives rejected and why
+**Visual references** — each approved mockup (what it shows, the approval wording, amendments), or "none"
 **Affects existing work** — artifacts, specs, or ticked tasks this contradicts (if a change exists)
 **Open questions** — none, or each one explicitly deferred with who decides
 **Verification** — how we will know it works
@@ -151,6 +168,7 @@ Rules for the handoff, whichever option is chosen:
 
 - **The brief is content; the schema is form.** Every artifact takes its structure from the `template`, `rules`, and `instruction` fields of `openspec instructions`, and is written to `resolvedOutputPath`. Never paste the brief verbatim as a proposal, and never copy `context` or `rules` blocks into an artifact.
 - **Nothing in the artifacts that was not in the approved brief.** A detail the artifacts need but the brainstorm did not settle is a question back to the user, not an invention.
+- **Every approved visual is saved and referenced** per [Visual references](#visual-references): files under `<changeDir>/mockups/`, a `mockups/README.md`, and a `Visual references` section in the design artifact. The handoff is not done until you have opened the design and seen it.
 - **The brainstorm ends at the artifacts.** Do not apply, implement, verify, or archive. Say what comes next — `openspec-apply-change`, `openspec-apply-change-parallel`, or `openspec-orchestrate-change` — and stop.
 
 ## Red flags
@@ -166,7 +184,8 @@ Rules for the handoff, whichever option is chosen:
 | "They approved the brief, so I can start implementing" | The brief approves artifact creation. Implementation is `openspec-apply-change`'s job and the user's call. |
 | "The schema wants a field the brief lacks, I'll fill it sensibly" | Ask. The artifacts must not say more than the user agreed to. |
 | "It grew, but we're nearly done — no need to re-classify" | Hidden complexity upgrades the path. Stop and say so. |
-
+| "The user approved the mockup; the brief describes it in words" | A description is not the design. Implementers built a different UI from exactly such a description. Save the file. |
+| "The mockup was shown inline; it's in the conversation" | Nobody downstream reads the conversation. If it is not under `mockups/` and named in the design, it is lost. |
 ## Checklist
 
 Classify first, announce the path, then work the items in order.
@@ -183,9 +202,9 @@ Classify first, announce the path, then work the items in order.
 
 1. Explore project context — files, docs, recent commits; read the active change's artifacts if one is relevant
 2. Ask the clarifying questions that matter — one at a time
-3. Present a short design in chat — behaviour that changes, approach, files touched, verification
+3. Present a short design in chat — behaviour that changes, approach, files touched, verification; a mockup where the UI is clearer shown
 4. Get approval — stop and wait for an explicit yes
-5. Write the brief and hand off — create the change, or update the existing one
+5. Write the brief and hand off — create the change, or update the existing one; save every approved visual under `mockups/` and confirm the design references it
 
 **Architectural**
 
@@ -193,6 +212,6 @@ Classify first, announce the path, then work the items in order.
 2. Check scope — decompose into separate changes if several independent subsystems are described
 3. Ask clarifying questions — one at a time: purpose, constraints, success criteria
 4. Propose 2–3 approaches — trade-offs and a recommendation
-5. Present the design in sections — approval after each
-6. Write the brief — assembled from the approved sections; confirm it
-7. Hand off — create the change and its artifacts, or update the existing one, then stop before implementation
+5. Present the design in sections — approval after each; a mockup the user approves becomes part of the design
+6. Write the brief — assembled from the approved sections, with its Visual references; confirm it
+7. Hand off — create the change and its artifacts, or update the existing one; save every approved visual under `mockups/` and confirm the design references it; then stop before implementation

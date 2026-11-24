@@ -48,7 +48,8 @@ Agent (read-only type where available):
        repo's instruction files. A style point with no named rule is a preference.
     3. **It belongs to this change.** Code the branch added or changed, or behaviour the
        change's specs describe.
-    4. **Fixing it agrees with the artifacts.** Authority order: spec deltas > design >
+    4. **Fixing it agrees with the artifacts** — the approved mockups under
+       `mockups/` count as artifacts for how the UI looks. Authority order: spec deltas > design >
        tasks > reviewer opinion.
 
     Size is not validity. Do not reject a finding because it is small, because the fix is

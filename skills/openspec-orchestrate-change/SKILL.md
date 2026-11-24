@@ -58,6 +58,8 @@ Follow `openspec-apply-change` steps 1–5 verbatim: select and announce the cha
 
 Also read the repo's agent instruction files — AGENTS.md, CLAUDE.md, or whatever equivalent it uses. You need them to write briefs and to judge reviews, even though you edit no product code.
 
+Then collect the change's **visual references**: every file under `<changeDir>/mockups/` (and its `README.md`), plus any image, HTML, or sketch the design artifact links to. `contextFiles` does not list them, so look. Open each one. These are the approved look of the change; they bind the UI exactly as the spec binds behaviour.
+
 Record from the apply JSON: `changeDir`, the tasks file (`tasks[].sourcePath`), and whether that file is inside this git repo (`git ls-files --error-unmatch <path>` succeeds). A change kept in an OpenSpec store usually lives in another repository — then `tasks.md` and the artifacts are edited in place but never committed by this run.
 
 ### 2. Branch and tree
@@ -92,6 +94,7 @@ Before the first dispatch, check the artifacts against each other once. Write th
 - One row per group: the requirements and scenarios from the spec deltas it satisfies (by requirement name and spec path), and whether its own task text is self-consistent.
 - One row per pair of groups that share a file or an interface: what one produces, what the other consumes, and what you found.
 - Every ADDED or MODIFIED requirement maps to at least one group. An unmapped requirement is a finding.
+- **Visual references.** When the change has mockups, one row per group that changes what the user sees: the mockup files that bind it. A change without mockups needs none; its UI is built from the text. One check only: if an artifact says a mockup was approved and its file is not under `<changeDir>/mockups/`, the approved design is missing — a [stop](#stop-conditions). Ask the user where it is and have it saved before any UI group is dispatched.
 
 Rule on each conflict before execution, using [Rulings](#rulings), and ledger it. "The scan is clean" without the rows is not a scan you ran.
 
@@ -134,6 +137,7 @@ Append an `## Acceptance` section to the brief yourself:
 
 - The spec files and requirement names this group satisfies, from the preflight table — paths and names, not copied text. The scenarios under them are the acceptance criteria.
 - The design sections that bind the group, by heading.
+- For a UI group, the mockup files that bind it, by path, with the binding versus illustrative details from `mockups/README.md`. The implemented UI must match them; a deviation the implementer needs is `NEEDS_CONTEXT`, and only the user can approve it.
 - Interfaces and decisions from earlier groups that the brief cannot know, and any ruling from the ledger that touches this group's area.
 - Your resolution of any ambiguity you noticed in the task text.
 - When the task text is too thin for an agent that has not seen this conversation — no files named, no observable outcome — the concrete file paths and expected behaviour, found by reading the design and the code.
@@ -264,6 +268,7 @@ Stop at the group boundary and ask only for these:
 - An irreversible or destructive operation, a security-sensitive action, or a side effect outside this tree that norms say to ask about first — a push, a merge, a publish, a migration against a shared database.
 - The build or tests are broken at a group boundary and the fix loop could not recover. Do not stack another group on a broken base.
 - The artifacts are so contradictory that every path forward is a guess.
+- An artifact names an approved mockup whose file is not in the change ([preflight](#4-preflight-scan)). Also: an implementer or reviewer reports that the UI cannot match its mockup — a deviation from an approved look is the user's call, like a spec change.
 
 "Should I continue?" is not on the list. Neither is a progress summary between groups.
 
@@ -310,5 +315,7 @@ ORCHESTRATE_RESULT: HALTED
 | "It's only Minor; it can wait" | Severity orders the fix list; it does not shorten it. A finding the validator holds gets fixed. |
 | "The validator is wrong about this one" | Overruling it is the pre-judging it exists to stop. Only artifact conflicts are yours. |
 | "I remember which groups are done" | After compaction you do not. Read the ledger and `git log`. |
+| "The mockups are only in the brainstorm chat; the implementer will manage" | Implementers and reviewers read the change directory, nothing else. Get them saved under `mockups/` first. |
+| "The UI differs from the mockup, but the spec scenarios pass" | Specs bind behaviour, mockups bind the look. Visual drift is a failed review. |
 | "The implementer spawned its own reviewer — extra assurance" | It duplicated a review seat at full cost. Flag it; the group review is the gate. |
 | "Two groups look independent; run them together" | Parallel implementers break the `BASE..HEAD` ranges every review depends on. |

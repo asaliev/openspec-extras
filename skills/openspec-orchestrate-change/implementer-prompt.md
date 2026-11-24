@@ -20,6 +20,11 @@ Agent:
     - <proposal path>
     - <design path, if any>
 
+    If Acceptance names mockup files, open every one before writing UI code. They are the
+    approved look: layout, hierarchy, element order, labels, and colours must match them
+    (sample data in them is illustrative). Where the codebase's components cannot produce
+    what the mockup shows, report NEEDS_CONTEXT — never substitute your own design.
+
     Do not read the rest of the tasks file. Other groups are not yours.
 
     ## Context

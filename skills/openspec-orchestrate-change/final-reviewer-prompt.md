@@ -15,6 +15,7 @@ Agent (read-only type where available):
     ## Inputs
 
     - Change artifacts — read all of them: <every contextFiles path>
+    - Visual references — open all of them: <every file under changeDir/mockups/, or "none">
     - Branch diff: <PACKAGE_FILE> (<MERGE_BASE>..<HEAD>). Read it once; do not re-run git
       commands for the same range.
     - Orchestration ledger: <LEDGER_FILE>. Its `minor (deferred)` and `parked` lines are
@@ -38,6 +39,8 @@ Agent (read-only type where available):
       scenario is handled in code and covered by a test.
     - **Coherence** — the design's decisions are followed, and the code follows the
       repo's existing patterns.
+    - **Visual fidelity** — every screen a mockup covers is built as the mockup shows it:
+      layout, hierarchy, element order, labels, colours.
 
     Spec verification outranks code review. Where they disagree, the spec wins.
 

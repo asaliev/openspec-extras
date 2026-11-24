@@ -65,6 +65,10 @@ Agent (read-only type where available):
     - **Extra** — behaviour nobody specified, over-engineering, unrequested "nice to haves"
     - **Misunderstood** — the right feature built the wrong way
     - **Untested scenario** — a testable scenario with no test that exercises it
+    - **Visual drift** — when Acceptance names mockup files, open them and compare the
+      UI code against each: layout, hierarchy, element order, labels, colours, and which
+      elements exist. Every difference not ruled in the brief is Important, with the
+      mockup detail and the file:line that departs from it.
 
     A requirement you cannot verify from this diff alone — it lives in unchanged code or
     spans groups — goes under ⚠️ rather than widening your search.
