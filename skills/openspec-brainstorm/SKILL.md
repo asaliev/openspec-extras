@@ -169,7 +169,22 @@ Rules for the handoff, whichever option is chosen:
 - **The brief is content; the schema is form.** Every artifact takes its structure from the `template`, `rules`, and `instruction` fields of `openspec instructions`, and is written to `resolvedOutputPath`. Never paste the brief verbatim as a proposal, and never copy `context` or `rules` blocks into an artifact.
 - **Nothing in the artifacts that was not in the approved brief.** A detail the artifacts need but the brainstorm did not settle is a question back to the user, not an invention.
 - **Every approved visual is saved and referenced** per [Visual references](#visual-references): files under `<changeDir>/mockups/`, a `mockups/README.md`, and a `Visual references` section in the design artifact. The handoff is not done until you have opened the design and seen it.
-- **The brainstorm ends at the artifacts.** Do not apply, implement, verify, or archive. Say what comes next — `openspec-apply-change`, `openspec-apply-change-parallel`, or `openspec-orchestrate-change` — and stop.
+- **Verify before you report.** Every artifact written or edited goes through [Verify the artifacts](#verify-the-artifacts) — including artifacts another skill wrote.
+- **The brainstorm ends at the verified artifacts.** Do not apply, implement, or archive. Say what comes next — `openspec-apply-change`, `openspec-apply-change-parallel`, or `openspec-orchestrate-change` — and stop.
+
+## Verify the artifacts
+
+Whenever the handoff wrote or edited artifacts, verify them before reporting the handoff done. Artifacts written by `openspec-propose`, `openspec-ff-change`, or `openspec-continue-change` are unchecked until you read them. With **Stop here** there is nothing to verify.
+
+1. **Validate.** Run `openspec validate "<name>" --type change --strict` (with `--store <id>` when the change lives in a store). Fix each reported issue in the artifact that owns it and re-run until it passes. When a fix needs a decision the brief does not contain, ask — never invent content to satisfy the validator.
+2. **Check against the brief.** Read every artifact the handoff wrote or touched (`openspec status --change "<name>" --json` → `existingOutputPaths`) with the brief beside it:
+   - **Coverage** — every capability, behaviour, decision, and verification step in the brief appears in the artifact that owns it.
+   - **No additions** — no requirement, scenario, decision, or task the brief did not settle. Remove it, or ask.
+   - **Consistency** — the artifacts agree with each other: capabilities in the proposal match the spec directories, every requirement has tasks that build and verify it, the design contradicts no scenario.
+   - **Precision** — no placeholders (`TBD`, `TODO`, unfilled template text), no scenario a tester could not check, no requirement with two readings.
+   - **Existing work** — for an update, everything the brief named under "Affects existing work" is stated in the artifacts.
+3. **Check visual references** — step 5 of [Visual references](#visual-references).
+4. **Report.** In a few lines: what validation and the read-through found, and what you fixed. A gap that needs the user's decision is reported as an open question, never left silently in the artifacts.
 
 ## Red flags
 
@@ -186,6 +201,9 @@ Rules for the handoff, whichever option is chosen:
 | "It grew, but we're nearly done — no need to re-classify" | Hidden complexity upgrades the path. Stop and say so. |
 | "The user approved the mockup; the brief describes it in words" | A description is not the design. Implementers built a different UI from exactly such a description. Save the file. |
 | "The mockup was shown inline; it's in the conversation" | Nobody downstream reads the conversation. If it is not under `mockups/` and named in the design, it is lost. |
+| "`openspec-propose` wrote the artifacts, so they match the brief" | Another skill's output is unchecked. Validate it and read it against the brief. |
+| "Validation passed, so the artifacts are right" | The validator checks structure, not that the artifacts say what the user approved. Do the read-through too. |
+
 ## Checklist
 
 Classify first, announce the path, then work the items in order.
@@ -204,7 +222,8 @@ Classify first, announce the path, then work the items in order.
 2. Ask the clarifying questions that matter — one at a time
 3. Present a short design in chat — behaviour that changes, approach, files touched, verification; a mockup where the UI is clearer shown
 4. Get approval — stop and wait for an explicit yes
-5. Write the brief and hand off — create the change, or update the existing one; save every approved visual under `mockups/` and confirm the design references it
+5. Write the brief and hand off — create the change, or update the existing one; save every approved visual under `mockups/`
+6. Verify the artifacts — `openspec validate --strict`, read them against the brief, confirm the design references every mockup; report what you found and fixed
 
 **Architectural**
 
@@ -214,4 +233,5 @@ Classify first, announce the path, then work the items in order.
 4. Propose 2–3 approaches — trade-offs and a recommendation
 5. Present the design in sections — approval after each; a mockup the user approves becomes part of the design
 6. Write the brief — assembled from the approved sections, with its Visual references; confirm it
-7. Hand off — create the change and its artifacts, or update the existing one; save every approved visual under `mockups/` and confirm the design references it; then stop before implementation
+7. Hand off — create the change and its artifacts, or update the existing one; save every approved visual under `mockups/`
+8. Verify the artifacts — `openspec validate --strict`, read them against the brief, confirm the design references every mockup; report what you found and fixed; then stop before implementation
