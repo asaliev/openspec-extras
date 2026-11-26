@@ -1,7 +1,6 @@
 ---
 name: openspec-orchestrate-change
 description: Implement an OpenSpec change as an orchestrator — one fresh implementer subagent per task group, a spec-compliance and code-quality review gate after each group, a bounded fix loop with model escalation, and a whole-branch review against the change artifacts at the end whose findings a separate validator confirms or rejects, with every confirmed finding fixed. Use when asked to orchestrate, drive, or implement an OpenSpec change with subagents and review gates.
-disable-model-invocation: true
 ---
 
 # OpenSpec Orchestrate Change

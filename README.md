@@ -63,7 +63,7 @@ The task group, not each checkbox, is the unit of dispatch. That keeps a typical
 
 The orchestrator rules on implementation and design questions without stopping, and records every ruling for the final report. It may correct `tasks.md` and `design.md` in place so the archived change stays truthful. It never rules on specified behaviour: anything that would add, narrow, or drop a spec requirement or scenario stops the run and asks you. Commits land on a feature branch, and the skill asks before committing to the default branch. The change is never archived, synced, or pushed.
 
-Requires a harness that can spawn subagents with an explicit model. This skill sets `disable-model-invocation: true`, so it runs only when you invoke it.
+Requires a harness that can spawn subagents with an explicit model.
 
 ### `openspec-review-cycle`
 
