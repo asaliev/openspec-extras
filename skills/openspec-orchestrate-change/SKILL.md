@@ -129,7 +129,7 @@ These levels are starting points drawn from the model vendor's published guidanc
 
 ## The group loop
 
-Run groups in `tasks.md` order. Do not pause between groups to check in or summarise — the user asked for the change to be implemented. Narrate at most one short line between tool calls; the ledger carries the record.
+Run groups in `tasks.md` order. Do not pause between groups to check in or ask whether to continue — the user asked for the change to be implemented. Tell the user in a short line when a group completes, a fix loop starts or trips its cap, or you make a ruling; the ledger carries the full record.
 
 Never run two implementers at once. Groups commit to one branch in one tree, and every review depends on a clean `BASE..HEAD` range.
 

@@ -5,8 +5,8 @@ Use this template once, after the last group. It verifies the whole change again
 ```
 Agent (read-only type where available):
   description: "Final review of <change-name>"
-  model: <most capable tier — REQUIRED>
-  effort: xhigh — REQUIRED where the harness accepts it
+  model: <most capable tier, or the user's pin for this role — REQUIRED>
+  effort: <xhigh, or the user's pin for this role — REQUIRED where the harness accepts it>
   prompt: |
     You are the final reviewer for the OpenSpec change "<change-name>". Every task group
     has passed its own review gate. Your job is what those gates could not see: whether

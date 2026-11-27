@@ -130,7 +130,7 @@ Add `-m <model>` and `-c model_reasoning_effort=<level>` only when the user aske
 
 Decide once, before cycle 1, from the tools you have in this harness — not from environment variables, not from a guess at which product you are running in, and not from whether the user named an effort level:
 
-- **If you can dispatch a subagent with an explicit model and an explicit effort level, use the subagent path.** In Claude Code that is the **Agent** tool with its per-call `effort` parameter (Claude Code 2.1.292 or later). No `claude` CLI is needed.
+- **If you can dispatch a subagent with an explicit model and an explicit effort level, use the subagent path.** In Claude Code that is the **Agent** tool with its per-call `effort` parameter. No `claude` CLI is needed.
 - **Otherwise use the `claude -p` subprocess path.** That covers Codex, a Claude Code too old to accept `effort` on the Agent tool, and any harness without a subagent tool. This path needs `claude --version` to succeed.
 
 Name the chosen path in the settings echo line.
@@ -164,7 +164,7 @@ Run the reviewer as a `claude -p` subprocess:
 
 Add `--model <model>` and `--effort <low|medium|high|xhigh|max>` only when the user named them. The same three prompt adjustments apply, plus three rules specific to the subprocess:
 
-- **Read-only is enforced by permissions, not by a sandbox.** `plan` mode plus the denied write tools plus `--permission-prompts none` (nothing can be approved — no human is watching a `-p` run) is what holds the reviewer back; there is no OS-level guarantee the way `--sandbox read-only` gives one. So after every subprocess review pass, compare `git rev-parse HEAD` and `git status --porcelain` against the values recorded at [Setup](#setup). If the tree moved, stop and tell the user — do not apply findings from a pass that also edited the code. A read-only subagent needs no such check.
+- **Read-only is enforced by permissions, not by a sandbox.** `plan` mode plus the denied write tools plus `--permission-prompts none` (nothing can be approved — no human is watching a `-p` run) is what holds the reviewer back; there is no OS-level guarantee the way `--sandbox read-only` gives one. So record `git rev-parse HEAD` and `git status --porcelain` immediately before every subprocess review pass, and compare against them when it finishes. If the tree moved, stop and tell the user — do not apply findings from a pass that also edited the code. A read-only subagent needs no such check.
 - **`ExitPlanMode` is denied on purpose.** Without it, plan mode invites the reviewer to exit with a plan instead of a review.
 - **There is no `--cd` and no `-o`.** Run it from `$REPO_ROOT` as above; the final assistant message is the review and arrives on stdout, so redirect it.
 
@@ -268,10 +268,9 @@ Re-review the current state of the change:
 - Do not repeat deferred findings that were tracked somewhere.
 - Raise anything new you now see — across the whole scope, not only near the lines the last pass edited. Verifying the previous fix is one step, not the frame for this review; a finding four lines from the last edit usually means the earlier pass under-read that region, so read each touched file whole before reporting.
 - Comments and documentation the previous cycle's findings caused to be written exist because this loop asked for them. Do not raise a finding against that text unless it is factually wrong about the code — and then ask for its deletion, not a rewrite.
-- Any code you cite this cycle that was already present at cycle 1 means the earlier passes under-read that file. Read every file the previous fixes touched from top to bottom before reporting, so its siblings surface now rather than next cycle.
 ```
 
-From cycle 3 on, add:
+From cycle 3 on, when most of the previous cycles' findings were comment, naming, or wording changes, add:
 
 ```
 Cycles so far have spent findings on comment and documentation wording. Do not continue that.
