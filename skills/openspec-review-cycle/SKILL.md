@@ -21,7 +21,7 @@ The reviewer never writes. The applying subagent never reviews. Keeping those ro
 
 Check these before starting; stop and report if one fails.
 
-- The default Codex reviewer needs `codex --version` to succeed. A Claude reviewer runs as a subagent and needs no CLI check — unless the user named an effort level, which forces the subprocess path and so needs `claude --version`. If the required CLI is missing, the loop cannot run — tell the user which one.
+- The default Codex reviewer needs `codex --version` to succeed. A Claude reviewer needs a CLI check only on the subprocess path: the subagent path needs no CLI, the `claude -p` path needs `claude --version`. Which path applies depends on the harness, not on the request — see [Choosing the Claude reviewer path](#choosing-the-claude-reviewer-path). If the required CLI is missing, the loop cannot run — tell the user which one.
 - The working directory is a git repo with an `openspec/` root (or the user named an OpenSpec store).
 - `openspec --version` succeeds. If not, skip every `openspec` command below and let the reviewer's skill handle discovery.
 - The reviewer has a code-review skill and an `openspec-verify-change` skill available. If the code-review skill does not resolve in the reviewer's environment, fall back to the inline review brief in [Review prompt](#review-prompt).
@@ -35,13 +35,13 @@ Parse these from the user's request. Ask only about the change name, and only wh
 | --- | --- | --- |
 | Change name | none — must resolve | Run `openspec list --json`; if the request names one change unambiguously use it, otherwise use **AskUserQuestion** to let the user pick. Never guess. |
 | Max cycles | `3` | One cycle = one review pass plus one apply pass. A closing review follows the last apply pass that changed the tree, so `N` cycles means up to `N + 1` review passes. `1` = one review, one apply, one closing review. Use review-only mode to skip applying entirely. |
-| Reviewer | `codex` | "have Claude review", "reviewer: claude", "review with opus at xhigh" → run every review pass as a read-only **subagent** instead of `codex exec`, falling back to a `claude -p` subprocess only when an effort level was named. Nothing else about the loop changes. See [Step 1](#step-1--review-pass). |
+| Reviewer | `codex` | "have Claude review", "reviewer: claude", "review with opus at xhigh" → run every review pass with Claude instead of `codex exec` — as a read-only **subagent** when this harness can dispatch one with an explicit model and effort, otherwise as a `claude -p` subprocess. Nothing else about the loop changes. See [Choosing the Claude reviewer path](#choosing-the-claude-reviewer-path). |
 | Reviewer model | unset | Pass the model string the user names through verbatim — Codex `-m <model>`, a Claude subagent's `model` parameter, a Claude subprocess's `--model <alias-or-full-id>`. Unset means the default the reviewer would use anyway (`~/.codex/config.toml`, the agent definition's model, or the Claude CLI's configured model). |
-| Reasoning effort | unset | Only when the user asks for more or less thinking. Codex: `-c model_reasoning_effort=<none\|minimal\|low\|medium\|high\|xhigh>`. Claude: `--effort <low\|medium\|high\|xhigh\|max>`, which a subagent cannot take — naming an effort level is what switches a Claude reviewer to the subprocess path. Map the user's words to the nearest level the chosen reviewer supports, and say which level you picked. |
+| Reasoning effort | unset | Only when the user asks for more or less thinking. Codex: `-c model_reasoning_effort=<none\|minimal\|low\|medium\|high\|xhigh>`. Claude: `low\|medium\|high\|xhigh\|max`, passed as the Agent tool's `effort` parameter on the subagent path or as `--effort <level>` on the `claude -p` path. Naming an effort level does not change which path runs. Map the user's words to the nearest level the chosen reviewer supports, and say which level you picked. |
 | Review scope | this branch's work vs its base | If the user states a scope in any form, use it. Only when they say nothing about scope, fall back to the base-branch default. See [Resolving the review scope](#resolving-the-review-scope). |
 | Review-only | off | "just review", "no fixes", "dry run" → run cycle 1's review, report, stop before applying. No apply pass runs, so that review is already terminal — do not follow it with a redundant closing review. |
 
-Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · reviewer: codex (model: config default) · max 3 cycles + closing review · scope: git diff <resolved range>`. For a Claude reviewer, say which form it takes — `reviewer: claude subagent (model: opus)` or `reviewer: claude -p (model: opus, effort: xhigh)`.
+Echo the resolved settings in one line before the first cycle so the user can interrupt: `Change: X · reviewer: codex (model: config default) · max 3 cycles + closing review · scope: git diff <resolved range>`. For a Claude reviewer, name the path it takes — `reviewer: claude subagent (model: opus, effort: xhigh)` or `reviewer: claude -p (model: opus, effort: xhigh)`. Leave out `effort` when the user named none.
 
 ### Resolving the review scope
 
@@ -126,6 +126,17 @@ Add `-m <model>` and `-c model_reasoning_effort=<level>` only when the user aske
 
 **Claude — when the user asked for a Claude reviewer:**
 
+#### Choosing the Claude reviewer path
+
+Decide once, before cycle 1, from the tools you have in this harness — not from environment variables, not from a guess at which product you are running in, and not from whether the user named an effort level:
+
+- **If you can dispatch a subagent with an explicit model and an explicit effort level, use the subagent path.** In Claude Code that is the **Agent** tool with its per-call `effort` parameter (Claude Code 2.1.292 or later). No `claude` CLI is needed.
+- **Otherwise use the `claude -p` subprocess path.** That covers Codex, a Claude Code too old to accept `effort` on the Agent tool, and any harness without a subagent tool. This path needs `claude --version` to succeed.
+
+Name the chosen path in the settings echo line.
+
+#### Subagent path
+
 Spawn a subagent with the **Agent** tool. Do not start a second `claude` process: a subagent already runs inside this session, so it inherits the repo's agent instructions and skills, needs no separate startup or auth, and its transcript stays out of this conversation's context.
 
 Use a read-only agent type — `Explore` where the environment offers it. Pass the contents of `$RUN_DIR/cycle-<n>-prompt.md` as the agent's prompt, and write its final report to `$RUN_DIR/cycle-<n>-review.md` yourself: a subagent answers to you, not to a file, so nothing lands on disk unless you save it.
@@ -136,27 +147,30 @@ Three adjustments to the prompt on this path:
 - **Ask for the whole review as the final message.** The agent's report is the only thing that reaches you; a summary of a review is not a review.
 - **Say it must not edit anything.** A read-only agent type already enforces this, but the instruction also keeps the agent from proposing an implementation plan instead of reporting findings.
 
-Pass the user's model through the Agent tool's `model` parameter when they named one.
+Pass the user's model through the Agent tool's `model` parameter and their effort level through its `effort` parameter, each only when they named one. A per-call `effort` overrides the agent definition's frontmatter.
 
-**Only when the user named an effort level**, fall back to a subprocess — the Agent tool takes a model override but no effort override, so a subagent's effort comes from its definition's frontmatter and cannot be chosen per run:
+#### Subprocess path
+
+Run the reviewer as a `claude -p` subprocess:
 
 ```bash
 (cd "$REPO_ROOT" && claude -p \
   --permission-mode plan \
   --permission-prompts none \
   --disallowed-tools "Edit Write NotebookEdit ExitPlanMode" \
-  --effort <low|medium|high|xhigh|max> \
   < "$RUN_DIR/cycle-<n>-prompt.md" \
   > "$RUN_DIR/cycle-<n>-review.md")
 ```
 
-Add `--model <model>` too when the user named one. The same three prompt adjustments apply, plus three rules specific to the subprocess:
+Add `--model <model>` and `--effort <low|medium|high|xhigh|max>` only when the user named them. The same three prompt adjustments apply, plus three rules specific to the subprocess:
 
 - **Read-only is enforced by permissions, not by a sandbox.** `plan` mode plus the denied write tools plus `--permission-prompts none` (nothing can be approved — no human is watching a `-p` run) is what holds the reviewer back; there is no OS-level guarantee the way `--sandbox read-only` gives one. So after every subprocess review pass, compare `git rev-parse HEAD` and `git status --porcelain` against the values recorded at [Setup](#setup). If the tree moved, stop and tell the user — do not apply findings from a pass that also edited the code. A read-only subagent needs no such check.
 - **`ExitPlanMode` is denied on purpose.** Without it, plan mode invites the reviewer to exit with a plan instead of a review.
 - **There is no `--cd` and no `-o`.** Run it from `$REPO_ROOT` as above; the final assistant message is the review and arrives on stdout, so redirect it.
 
-Use the same reviewer, model, and effort for every cycle of a run and for the closing review. Switching mid-loop makes "the findings stopped moving" unreadable — a new reviewer's fresh findings look identical to a lack of convergence.
+#### Every reviewer
+
+Use the same reviewer, model, effort, and Claude path for every cycle of a run and for the closing review. Switching mid-loop makes "the findings stopped moving" unreadable — a new reviewer's fresh findings look identical to a lack of convergence.
 
 Run a CLI reviewer in the background — a thorough review routinely exceeds ten minutes — and wait for it to finish rather than polling on a short timer. If it exits non-zero or `cycle-<n>-review.md` is empty, do not retry blindly: report the exit code and the tail of stderr, and stop. A subagent already runs in the background; if it comes back without a review, report what it did return and stop, rather than re-spawning it.
 
@@ -355,7 +369,7 @@ codex exec \
   - < "$RUN_DIR/closing-prompt.md"
 ```
 
-or the Claude form from [Step 1](#step-1--review-pass) — the same subagent or subprocess the cycles used — with `closing-prompt.md` and `closing-review.md` in place of the cycle files.
+or the Claude form from [Step 1](#step-1--review-pass) — the same path the cycles used, subagent or `claude -p`, with the same model and effort — with `closing-prompt.md` and `closing-review.md` in place of the cycle files.
 
 Same background execution and the same failure handling: if the reviewer exits non-zero or the output is empty, report the exit code and the tail of stdout, do not retry blindly, and **do not report the change as verified** — an unrun closing review is `HALTED`, not `CLEAN`.
 

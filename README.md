@@ -74,11 +74,11 @@ Each cycle is two agents with separate jobs:
 - a **reviewer** runs a code review and `openspec-verify-change` in one read-only pass
 - a **subagent** applies the findings with the `apply-code-review` skill
 
-The reviewer is Codex by default. Ask for Claude instead and the review passes run as read-only subagents inside the same session, while everything else stays the same. Naming an effort level switches those passes to a `claude -p` subprocess, since a subagent takes a model but not an effort level.
+The reviewer is Codex by default. Ask for Claude instead and everything else stays the same. Where the harness can dispatch a subagent with an explicit model and effort level (Claude Code 2.1.292 or later), the Claude review passes run as read-only subagents inside the same session. Under any other harness, Codex included, they run as a `claude -p` subprocess. The model and effort you name apply on either path.
 
-The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Whenever the last apply pass changed the tree, one closing review always follows it — read-only, with no fixes after it — so the final report says whether the fixes actually landed instead of only that they were attempted. Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. A Claude subagent reviewer runs under a read-only agent type; the `claude -p` fallback runs in plan mode with the write tools denied and nobody to approve a prompt, and the loop checks the tree after each of its passes. Spec verification outranks code review whenever the two disagree.
+The loop repeats until the review comes back clean, stops converging, or the cycle budget runs out (3 by default). Whenever the last apply pass changed the tree, one closing review always follows it — read-only, with no fixes after it — so the final report says whether the fixes actually landed instead of only that they were attempted. Codex runs under `--sandbox read-only`, so the reviewer can never edit the code it reviews. A Claude subagent reviewer runs under a read-only agent type; a `claude -p` reviewer runs in plan mode with the write tools denied and nobody to approve a prompt, and the loop checks the tree after each of its passes. Spec verification outranks code review whenever the two disagree.
 
-Requires the Codex CLI — or, for a Claude reviewer at a named effort level, the Claude CLI — plus a code-review skill and `openspec-verify-change` on the reviewer's side.
+Requires the Codex CLI — or, for a Claude reviewer in a harness without such a subagent tool, the Claude CLI — plus a code-review skill and `openspec-verify-change` on the reviewer's side.
 
 This skill sets `disable-model-invocation: true`: a loop of Codex reviews and subagent fix passes is too
 expensive to start on its own guess of your intent, so it runs only when you invoke it explicitly. Remove
