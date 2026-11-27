@@ -6,6 +6,7 @@ Use this template to dispatch the implementer for one task group.
 Agent:
   description: "Implement group <N>: <group title>"
   model: <tier from SKILL.md Model selection — REQUIRED>
+  effort: <level from SKILL.md Model selection — REQUIRED where the harness accepts it>
   prompt: |
     You are implementing task group <N> of the OpenSpec change "<change-name>".
 

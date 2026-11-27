@@ -59,11 +59,11 @@ The session acts as an orchestrator and never writes product code itself. For ea
 
 After the last group, one whole-branch review on the most capable model verifies the change against its artifacts. A separate validator, also on the most capable model, checks every finding against the code and decides which hold up. Every finding that holds is fixed through the same bounded fix loop, whatever its severity. The rest are closed with evidence or reported as follow-ups, so nothing is quietly deferred.
 
-The task group, not each checkbox, is the unit of dispatch. That keeps a typical change to roughly two agents per group rather than two per checkbox. Every model is chosen explicitly by role. A git-ignored ledger under `.openspec-extras/orchestrate/<change>/` lets an interrupted run resume without redoing finished groups.
+The task group, not each checkbox, is the unit of dispatch. That keeps a typical change to roughly two agents per group rather than two per checkbox. Every model and effort level is chosen explicitly by role. Effort rises where fewer gates remain behind a step, and the final report suggests per-role pins from how the run went. A git-ignored ledger under `.openspec-extras/orchestrate/<change>/` lets an interrupted run resume without redoing finished groups.
 
 The orchestrator rules on implementation and design questions without stopping, and records every ruling for the final report. It may correct `tasks.md` and `design.md` in place so the archived change stays truthful. It never rules on specified behaviour: anything that would add, narrow, or drop a spec requirement or scenario stops the run and asks you. Commits land on a feature branch, and the skill asks before committing to the default branch. The change is never archived, synced, or pushed.
 
-Requires a harness that can spawn subagents with an explicit model.
+Requires a harness that can spawn subagents with an explicit model, and ideally an explicit effort level (Claude Code 2.1.292 or later).
 
 ### `openspec-review-cycle`
 

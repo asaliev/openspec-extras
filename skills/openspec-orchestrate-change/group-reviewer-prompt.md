@@ -6,6 +6,7 @@ Use this template for the review gate after each group. The reviewer reads the g
 Agent (read-only type where available):
   description: "Review group <N> (spec + quality)"
   model: <tier from SKILL.md Model selection — REQUIRED>
+  effort: <level from SKILL.md Model selection — REQUIRED where the harness accepts it>
   prompt: |
     You are reviewing one task group of the OpenSpec change "<change-name>": first whether
     it does what the change specifies, then whether it is well built. This is a

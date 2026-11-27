@@ -6,6 +6,7 @@ Use this template after each fix round — a group's, or the final fix loop's. I
 Agent (read-only type where available):
   description: "Re-review group <N> fix round <R>"
   model: <tier from SKILL.md Model selection — REQUIRED>
+  effort: <level from SKILL.md Model selection — REQUIRED where the harness accepts it>
   prompt: |
     You are re-reviewing one fix round of the OpenSpec change "<change-name>". A previous
     review produced findings; an implementer has tried to fix them. Verdict each finding

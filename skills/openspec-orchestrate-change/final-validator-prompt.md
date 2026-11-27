@@ -6,6 +6,7 @@ Use this template once, after the final review returns findings. It decides whic
 Agent (read-only type where available):
   description: "Validate final review of <change-name>"
   model: <most capable tier — REQUIRED>
+  effort: high — REQUIRED where the harness accepts it
   prompt: |
     You are validating the final review of the OpenSpec change "<change-name>". A reviewer
     has reported findings against the whole branch. You decide which of them hold up.

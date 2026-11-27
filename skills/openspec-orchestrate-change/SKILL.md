@@ -44,10 +44,10 @@ Parse these from the user's request. Ask only about the change name, and only wh
 | --- | --- | --- |
 | Change name | none — must resolve | Same rule as `openspec-apply-change`: the named change, inferred from context, or the lone active one; otherwise **AskUserQuestion** over `openspec list --json`. Never guess. |
 | Store | none | Pass `--store <id>` on every `openspec` command, as `openspec-apply-change` describes. |
-| Max fix rounds | `3` | Per group. Rounds before the last resume the original implementer; the last round is a fresh implementer one model tier up. |
-| Model tiers | harness defaults | The user may pin a model per role ("implement with sonnet, review with opus"). Pinned models override [Model selection](#model-selection). |
+| Max fix rounds | `3` | Per group. Rounds before the last resume the original implementer; the last round is a fresh implementer one model tier up (one effort level up at the top tier). |
+| Model tiers and effort | [Model selection](#model-selection) | The user may pin a model, an effort level, or both per role ("implement with sonnet, final review with opus at max"). A pin overrides [Model selection](#model-selection) for that role only. |
 
-Echo the resolved settings in one line, then start: `Change: X (schema: spec-driven) · 6 groups, 4 remaining · branch: change/x · max 3 fix rounds`.
+Echo the resolved settings in one line, then start: `Change: X (schema: spec-driven) · 6 groups, 4 remaining · branch: change/x · max 3 fix rounds · effort: per role`. Name any pinned model or effort, and any environment override of effort.
 
 ## Setup
 
@@ -99,23 +99,33 @@ Rule on each conflict before execution, using [Rulings](#rulings), and ledger it
 
 ## Model selection
 
-Always pass a model when dispatching. An omitted model inherits the session's — usually the most expensive — and silently defeats this section.
+Always pass a model and an effort level when dispatching. An omitted model inherits the session's, which is usually the most expensive one, and that silently defeats this section. An omitted effort is no more predictable. A subagent on the session's model inherits the session's level, whatever the user last picked. On another model the harness may not document what level applies, and per-model defaults differ.
 
-Work in three tiers and map them to what the harness offers (in Claude Code: `haiku`, `sonnet`, `opus`):
+Work in three tiers and map them to what the harness offers (in Claude Code: `haiku`, `sonnet`, `opus`). Effort uses the levels `low`, `medium`, `high`, and `xhigh`. In Claude Code, pass effort as the Agent tool's `effort` parameter. In Codex, pass it as `model_reasoning_effort`.
 
-| Role | Tier |
-| --- | --- |
-| Implementer — task text names exact files, values, and tests | cheap |
-| Implementer — prose description, multi-file, or integration work | standard |
-| Implementer — design judgment or broad codebase understanding | most capable |
-| Group reviewer | standard; most capable for subtle concurrency, security, or data-integrity diffs |
-| Scoped re-review of a small fix diff | cheap to standard |
-| Last fix round | one tier above the implementer that got stuck |
-| Final review | most capable |
-| Final findings validator | most capable |
-| Final fix implementer | standard or higher |
+| Role | Tier | Effort |
+| --- | --- | --- |
+| Implementer — task text names exact files, values, and tests | cheap | medium |
+| Implementer — prose description, multi-file, or integration work | standard | medium |
+| Implementer — design judgment or broad codebase understanding | most capable | high |
+| Group reviewer | standard; most capable for subtle concurrency, security, or data-integrity diffs | high |
+| Scoped re-review of a small fix diff | cheap to standard | medium |
+| Last fix round | one tier above the implementer that got stuck | the stuck implementer's level; at the top tier, one level higher |
+| Final review | most capable | xhigh |
+| Final findings validator | most capable | high |
+| Final fix implementer | standard or higher | high |
 
 Turn count beats token price: the cheapest tier routinely takes 2–3× the turns on multi-step work. Use it only where the work is transcription plus testing.
+
+**How the effort levels are set.** The tier chooses how capable the model is. Effort only fine-tunes it, since a stronger model at lower effort usually beats a weaker one at higher effort. Three rules set the column:
+
+- **Effort rises as the safety net thins.** A group review catches an implementer's miss, and the final review catches a group review's miss. Nothing catches a miss by the final review or the validator. So the only `xhigh` dispatch is the final review: one call per run, and the last one that can catch what would otherwise ship.
+- **Nothing that writes code runs below `medium`.** At `low`, current models more often report a change done without running its tests, or stop early under a long brief. An implementer's `DONE` is worthless without test output.
+- **No `max` by default.** It lengthens turns sharply and pays off only where a gain is measured. The user can pin it.
+
+Escalation keeps those rules. A resumed implementer keeps its level. The last fix round raises the model tier first, and raises effort only when no higher tier exists.
+
+These levels are starting points drawn from the model vendor's published guidance, not measurements on this repository. The [final report](#final-report) records how each role performed, so a repository can tune its own pins. If the harness cannot set effort per dispatch, omit it and say so in the settings line. An environment-wide effort setting such as `CLAUDE_CODE_EFFORT_LEVEL` can take precedence over subagent levels. When one is set, name it in the settings line, because the table may not be what actually runs.
 
 ## The group loop
 
@@ -143,7 +153,7 @@ Append an `## Acceptance` section to the brief yourself:
 
 The brief is the single source of requirements. Keep exact values in the brief, never in the dispatch prompt, and never make an implementer read the whole tasks file.
 
-Dispatch from [implementer-prompt.md](implementer-prompt.md). Record `BASE` and the implementer's agent id in the ledger: `Group <N>: dispatched (base <sha7>, agent <id>, model <tier>)`.
+Dispatch from [implementer-prompt.md](implementer-prompt.md). Record `BASE` and the implementer's agent id in the ledger: `Group <N>: dispatched (base <sha7>, agent <id>, model <tier>, effort <level>)`. Record the model and effort of every review, re-review, and fix dispatch the same way. The final report's calibration reads them.
 
 A dispatch prompt describes one group, not the session's history. Do not paste summaries of earlier groups — a fresh implementer needs its brief, the interfaces it touches, and the constraints that bind it.
 
@@ -214,7 +224,7 @@ After the last group: review, validate, fix. Severity decides the order of the f
 PKG=$(bash scripts/review-package "$WS" "$MERGE_BASE" HEAD)
 ```
 
-Dispatch [final-reviewer-prompt.md](final-reviewer-prompt.md) on the most capable tier, read-only, with the package, the ledger path, and the change name. It verifies the whole change against its artifacts — what `openspec-verify-change` checks — reviews the branch as code, and re-checks the ledger's deferred minors and parked findings.
+Dispatch [final-reviewer-prompt.md](final-reviewer-prompt.md) on the most capable tier at `xhigh` effort, read-only, with the package, the ledger path, and the change name. It verifies the whole change against its artifacts — what `openspec-verify-change` checks — reviews the branch as code, and re-checks the ledger's deferred minors and parked findings.
 
 Save its report to `$WS/final-review.md` yourself — a subagent answers to you, not to a file. Ledger `Final: review (<K> findings)`. On `FINAL_REVIEW: CLEAN`, go to the [final report](#final-report).
 
@@ -222,7 +232,7 @@ Save its report to `$WS/final-review.md` yourself — a subagent answers to you,
 
 Reviewers over-report, and an implementer handed every claim changes correct code. Judging the list yourself is pre-judging, and judging it by severity is how real findings get deferred. A separate agent decides instead.
 
-Dispatch [final-validator-prompt.md](final-validator-prompt.md) on the most capable tier, read-only, with `$WS/final-review.md`, the same package, and the ledger. It checks every finding — all severities, SUGGESTIONs and Minors included — against the code at HEAD and returns one verdict each. Save its report to `$WS/final-validation.md` and ledger `Final: validation (<H> hold, <R> rejected, <C> conflict, <O> outside)`.
+Dispatch [final-validator-prompt.md](final-validator-prompt.md) on the most capable tier at `high` effort, read-only, with `$WS/final-review.md`, the same package, and the ledger. It checks every finding — all severities, SUGGESTIONs and Minors included — against the code at HEAD and returns one verdict each. Save its report to `$WS/final-validation.md` and ledger `Final: validation (<H> hold, <R> rejected, <C> conflict, <O> outside)`.
 
 | Verdict | Route |
 | --- | --- |
@@ -285,6 +295,13 @@ Then, in `openspec-apply-change`'s completion format:
 4. Artifact amendments made to `tasks.md` or `design.md`, with paths.
 5. Rejected findings, one line each with the validator's evidence; outside-change findings as follow-ups; out-of-scope observations from the final re-reviews.
 6. Build and test status from the last implementer report, and the branch with its commit range from `MERGE_BASE`.
+7. **Effort calibration.** Read it from the ledger's model and effort records, never from memory. List only the signals that fired, one line each, as a pin to try on the next run:
+   - **Implementer too low**: a group reached the last fix round, or a fix report came back without test output. Name the tier and the level it ran at.
+   - **Group reviewer too low**: a held final-review finding of Critical or Important severity sits in code that a group review passed.
+   - **Final reviewer noisy**: the validator rejected more than half of its findings. More effort does not fix this. Look at the prompt or the model first.
+   - **Possibly over-provisioned**: every group passed review on its first try, and nothing held at the final review. One run proves little, so suggest trying one level lower on the implementer only.
+
+   If no signal fired, write `Effort calibration: defaults held.`
 
 When the result is `COMPLETE`, delete the workspace (`rm -rf "$WS"`) — git history and the report are the record now. Otherwise keep it; it is what a resumed run reads.
 
@@ -317,4 +334,6 @@ ORCHESTRATE_RESULT: HALTED
 | "The mockups are only in the brainstorm chat; the implementer will manage" | Implementers and reviewers read the change directory, nothing else. Get them saved under `mockups/` first. |
 | "The UI differs from the mockup, but the spec scenarios pass" | Specs bind behaviour, mockups bind the look. Visual drift is a failed review. |
 | "The implementer spawned its own reviewer — extra assurance" | It duplicated a review seat at full cost. Flag it; the group review is the gate. |
+| "Max effort everywhere is the safe choice" | It multiplies turn length and cost on work the next gate already checks. Spend effort where nothing comes after: the final review. |
+| "Effort is optional; the default is fine" | The default is whatever the session or the model happens to use. Pass the level from the table, just like the model. |
 | "Two groups look independent; run them together" | Parallel implementers break the `BASE..HEAD` ranges every review depends on. |
